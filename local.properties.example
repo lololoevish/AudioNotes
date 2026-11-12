@@ -1,0 +1,14 @@
+# Local configuration (not committed).
+# Copy to local.properties and fill in your values.
+
+# Android SDK location
+sdk.dir=C\:\\Android\\Sdk
+
+# Groq API key (https://console.groq.com/keys) - injected into BuildConfig.GROQ_API_KEY
+groq.api.key=YOUR_GROQ_API_KEY_HERE
+
+# Model used for summary generation
+groq.model=llama-3.3-70b-versatile
+
+# OpenAI-compatible base URL
+groq.base.url=https\://api.groq.com/openai/v1/

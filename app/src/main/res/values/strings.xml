@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AudioNotes</string>
+
+    <string name="home_title">AudioNotes</string>
+    <string name="home_subtitle">Лекции → готовый конспект</string>
+    <string name="home_record_start">Начать запись</string>
+    <string name="home_record_stop">Остановить запись</string>
+    <string name="home_history">История конспектов</string>
+    <string name="home_settings">Настройки</string>
+
+    <string name="lecture_type_title">Какая это была лекция?</string>
+    <string name="lecture_type_exact">Точные науки</string>
+    <string name="lecture_type_exact_sub">Математика, физика, информатика, химия</string>
+    <string name="lecture_type_humanities">Гуманитарные науки</string>
+    <string name="lecture_type_humanities_sub">История, литература, философия, социология</string>
+
+    <string name="processing_transcribing">Распознавание аудио…</string>
+    <string name="processing_generating">Генерация конспекта…</string>
+    <string name="processing_merging">Сведение частей конспекта…</string>
+    <string name="processing_hint">Не выключайте приложение — обработка идёт в фоне</string>
+    <string name="processing_retry">Повторить</string>
+    <string name="processing_edit_transcript">Проверить текст</string>
+    <string name="processing_continue">Продолжить</string>
+
+    <string name="result_save">Сохранить в .md</string>
+    <string name="result_play">Прослушать запись</string>
+    <string name="result_transcript">Полный текст расшифровки</string>
+    <string name="result_saved">Сохранено в Загрузки: %1$s</string>
+    <string name="result_save_failed">Не удалось сохранить файл</string>
+    <string name="result_regenerate">Сгенерировать заново</string>
+
+    <string name="transcript_title">Текст расшифровки</string>
+    <string name="transcript_hint">Можно поправить формулы и термины перед генерацией</string>
+    <string name="transcript_generate">Сгенерировать конспект</string>
+
+    <string name="history_title">История конспектов</string>
+    <string name="history_empty">Пока нет ни одной записи</string>
+    <string name="history_delete">Удалить</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="settings_theme">Тёмная тема</string>
+    <string name="settings_version">Версия приложения</string>
+    <string name="settings_api">LLM: Groq · %1$s</string>
+    <string name="settings_api_missing">LLM: Groq · ключ не задан</string>
+
+    <string name="common_close">Закрыть</string>
+    <string name="common_cancel">Отмена</string>
+    <string name="common_back">Назад</string>
+
+    <string name="error_network">Ошибка сети. Проверьте подключение и повторите.</string>
+    <string name="error_no_key">Не задан API-ключ Groq. Добавьте его в local.properties и пересоберите приложение.</string>
+    <string name="error_permission_mic">Нужен доступ к микрофону для записи лекции.</string>
+    <string name="error_record_failed">Не удалось начать запись</string>
+    <string name="error_transcription_empty">Не удалось распознать речь на этом устройстве</string>
+</resources>
