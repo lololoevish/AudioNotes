@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -32,14 +33,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,12 +69,25 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
 
-    var keyInput by remember(llm.apiKey) { mutableStateOf(llm.apiKey) }
-    var modelInput by remember(llm.model) { mutableStateOf(llm.model) }
-    var keyVisible by remember { mutableStateOf(false) }
+    // Черновик ввода: не пересоздаётся при обновлении сохранённых значений,
+    // иначе курсор в поле прыгает и ключ невозможно напечатать.
+    var keyInput by rememberSaveable { mutableStateOf(llm.apiKey) }
+    var modelInput by rememberSaveable { mutableStateOf(llm.model) }
+    var savedKey by rememberSaveable { mutableStateOf(llm.apiKey) }
+    var savedModel by rememberSaveable { mutableStateOf(llm.model) }
+    var keyVisible by rememberSaveable { mutableStateOf(false) }
     var providerMenuOpen by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = keyInput != savedKey || modelInput != savedModel
+
+    fun saveAll() {
+        onApiKeyChange(keyInput.trim())
+        onModelChange(modelInput.trim())
+        savedKey = keyInput.trim()
+        savedModel = modelInput.trim()
+    }
 
     Scaffold(
         topBar = {
@@ -171,10 +188,7 @@ fun SettingsScreen(
 
             OutlinedTextField(
                 value = keyInput,
-                onValueChange = {
-                    keyInput = it
-                    onApiKeyChange(it)
-                },
+                onValueChange = { keyInput = it },
                 label = { Text(stringResource(R.string.settings_api_key)) },
                 singleLine = true,
                 visualTransformation = if (keyVisible) {
@@ -184,43 +198,85 @@ fun SettingsScreen(
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    IconButton(onClick = { keyVisible = !keyVisible }) {
-                        Icon(
-                            imageVector = if (keyVisible) {
-                                Icons.Filled.VisibilityOff
-                            } else {
-                                Icons.Filled.Visibility
+                    Row {
+                        IconButton(onClick = { keyVisible = !keyVisible }) {
+                            Icon(
+                                imageVector = if (keyVisible) {
+                                    Icons.Filled.VisibilityOff
+                                } else {
+                                    Icons.Filled.Visibility
+                                },
+                                contentDescription = stringResource(R.string.settings_show_key)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                keyInput = ""
+                                onApiKeyChange("")
+                                savedKey = ""
+                            }
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.settings_clear_key)
+                            )
+                        }
+                    }
+                },
+                supportingText = {
+                    Column {
+                        Text(stringResource(R.string.settings_key_hint))
+                        Text(
+                            text = when {
+                                keyInput.isBlank() -> stringResource(R.string.settings_key_missing)
+                                hasUnsavedChanges -> stringResource(R.string.settings_key_dirty)
+                                else -> stringResource(R.string.settings_key_saved)
                             },
-                            contentDescription = null
+                            style = MaterialTheme.typography.labelLarge,
+                            color = when {
+                                keyInput.isBlank() -> MaterialTheme.colorScheme.onSurfaceVariant
+                                hasUnsavedChanges -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.primary
+                            }
                         )
                     }
                 },
-                supportingText = { Text(stringResource(R.string.settings_key_hint)) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        if (!state.isFocused && keyInput.trim() != savedKey) saveAll()
+                    }
             )
 
             Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = modelInput,
-                onValueChange = {
-                    modelInput = it
-                    onModelChange(it)
-                },
+                onValueChange = { modelInput = it },
                 label = { Text(stringResource(R.string.settings_model)) },
                 singleLine = true,
                 supportingText = { Text(llm.provider.defaultModel) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        if (!state.isFocused && modelInput.trim() != savedModel) saveAll()
+                    }
             )
 
             Spacer(Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
+                    onClick = { saveAll() },
+                    enabled = hasUnsavedChanges
+                ) {
+                    Text(stringResource(R.string.settings_save))
+                }
+                OutlinedButton(
                     onClick = {
                         testing = true
                         testResult = null
-                        onTestConnection(llm.provider, keyInput, modelInput) { result ->
+                        onTestConnection(llm.provider, keyInput.trim(), modelInput.trim()) { result ->
                             testing = false
                             testResult = result.fold(
                                 onSuccess = { "OK: $it" },
@@ -232,14 +288,17 @@ fun SettingsScreen(
                 ) {
                     Text(stringResource(R.string.settings_test))
                 }
-                OutlinedButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(llm.provider.consoleUrl))
-                        runCatching { context.startActivity(intent) }
-                    }
-                ) {
-                    Text(stringResource(R.string.settings_open_console))
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            TextButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(llm.provider.consoleUrl))
+                    runCatching { context.startActivity(intent) }
                 }
+            ) {
+                Text(stringResource(R.string.settings_open_console))
             }
 
             Spacer(Modifier.height(8.dp))

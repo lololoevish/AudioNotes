@@ -47,6 +47,12 @@
     <string name="settings_model">Модель (необязательно)</string>
     <string name="settings_test">Проверить подключение</string>
     <string name="settings_open_console">Где взять ключ</string>
+    <string name="settings_save">Сохранить</string>
+    <string name="settings_clear_key">Очистить ключ</string>
+    <string name="settings_show_key">Показать или скрыть ключ</string>
+    <string name="settings_key_saved">Ключ сохранён на устройстве</string>
+    <string name="settings_key_dirty">Есть несохранённые изменения — нажмите «Сохранить»</string>
+    <string name="settings_key_missing">Ключ не задан</string>
     <string name="settings_provider_blocked">Этот провайдер отдаёт 403 на запросы из России. Выберите другой или используйте VPN.</string>
 
     <string name="common_close">Закрыть</string>

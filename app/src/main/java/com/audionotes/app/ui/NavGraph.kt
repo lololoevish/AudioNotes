@@ -75,6 +75,7 @@ fun AppNavHost(
                         popUpTo(Routes.PROCESSING) { inclusive = true }
                     }
                 },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onNotice = { }
             )
         }

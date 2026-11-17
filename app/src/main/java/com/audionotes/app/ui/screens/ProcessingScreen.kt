@@ -47,6 +47,7 @@ fun ProcessingScreen(
     onEditTranscript: (String) -> Unit,
     onRetry: (String) -> Unit,
     onCompleted: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     onNotice: (String) -> Unit
 ) {
     LaunchedEffect(completedRecordingId) {
@@ -154,8 +155,13 @@ fun ProcessingScreen(
                             )
                         }
                         Spacer(Modifier.height(12.dp))
-                        Button(onClick = { onRetry(processing.recordingId) }) {
-                            Text(stringResource(R.string.processing_retry))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = { onRetry(processing.recordingId) }) {
+                                Text(stringResource(R.string.processing_retry))
+                            }
+                            OutlinedButton(onClick = onOpenSettings) {
+                                Text(stringResource(R.string.settings_title))
+                            }
                         }
                     }
                 }
