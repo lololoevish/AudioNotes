@@ -4,11 +4,11 @@
 # Android SDK location
 sdk.dir=C\:\\Android\\Sdk
 
-# Groq API key (https://console.groq.com/keys) - injected into BuildConfig.GROQ_API_KEY
-groq.api.key=YOUR_GROQ_API_KEY_HERE
+# Default LLM provider for the app: mistral | siliconflow | deepseek | github_models | groq
+llm.provider=mistral
 
-# Model used for summary generation
-groq.model=llama-3.3-70b-versatile
+# Optional: pre-set API key. Usually better to enter it in the app's Settings screen.
+llm.api.key=
 
-# OpenAI-compatible base URL
-groq.base.url=https\://api.groq.com/openai/v1/
+# Optional: model override. Empty = provider default.
+llm.model=

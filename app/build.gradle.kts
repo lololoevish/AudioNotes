@@ -16,9 +16,9 @@ val localProperties = Properties().apply {
 fun secret(value: String?): String =
     (value ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
 
-val groqApiKey = secret(localProperties.getProperty("groq.api.key"))
-val groqModel = localProperties.getProperty("groq.model") ?: "llama-3.3-70b-versatile"
-val groqBaseUrl = localProperties.getProperty("groq.base.url") ?: "https://api.groq.com/openai/v1/"
+val llmProviderId = localProperties.getProperty("llm.provider") ?: "mistral"
+val llmApiKey = secret(localProperties.getProperty("llm.api.key"))
+val llmModel = localProperties.getProperty("llm.model") ?: ""
 
 android {
     namespace = "com.audionotes.app"
@@ -33,9 +33,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKey\"")
-        buildConfigField("String", "GROQ_MODEL", "\"$groqModel\"")
-        buildConfigField("String", "GROQ_BASE_URL", "\"$groqBaseUrl\"")
+        buildConfigField("String", "LLM_PROVIDER_ID", "\"$llmProviderId\"")
+        buildConfigField("String", "LLM_API_KEY", "\"$llmApiKey\"")
+        buildConfigField("String", "LLM_MODEL", "\"$llmModel\"")
     }
 
     buildTypes {

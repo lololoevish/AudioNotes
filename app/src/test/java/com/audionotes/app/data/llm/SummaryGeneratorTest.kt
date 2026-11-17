@@ -1,6 +1,7 @@
 package com.audionotes.app.data.llm
 
 import com.audionotes.app.data.model.LectureType
+import com.audionotes.app.data.remote.LlmProvider
 import com.audionotes.app.data.remote.PromptFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,7 +15,10 @@ class SummaryGeneratorTest {
                 request: com.audionotes.app.data.remote.ChatRequest
             ): com.audionotes.app.data.remote.ChatResponse =
                 com.audionotes.app.data.remote.ChatResponse()
-        }
+        },
+        provider = LlmProvider.MISTRAL,
+        apiKey = "test-key",
+        model = ""
     )
 
     @Test
@@ -61,5 +65,28 @@ class SummaryGeneratorTest {
         assertTrue("Нужно требование LaTeX", exact.contains("LaTeX"))
         assertTrue("Запрет таблиц", exact.contains("таблицы"))
         assertTrue("Запрет вводных слов", humanities.contains("вводные слова"))
+    }
+
+    @Test
+    fun `providers keep openai compatible base urls`() {
+        LlmProvider.entries.forEach { provider ->
+            assertTrue(
+                "Некорректный базовый URL у ${provider.id}",
+                provider.baseUrl.startsWith("https://") && provider.baseUrl.endsWith("/")
+            )
+            assertTrue("Пустая модель по умолчанию у ${provider.id}", provider.defaultModel.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `groq is marked as blocked from russia`() {
+        assertTrue(
+            "Groq должен быть помечен как недоступный из России",
+            !LlmProvider.GROQ.worksFromRussia
+        )
+        assertTrue(
+            "Провайдер по умолчанию должен работать из России",
+            LlmProvider.default().worksFromRussia
+        )
     }
 }

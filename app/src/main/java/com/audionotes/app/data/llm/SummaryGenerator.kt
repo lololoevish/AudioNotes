@@ -1,10 +1,10 @@
 package com.audionotes.app.data.llm
 
-import com.audionotes.app.BuildConfig
 import com.audionotes.app.data.model.LectureType
 import com.audionotes.app.data.remote.ChatMessage
 import com.audionotes.app.data.remote.ChatRequest
 import com.audionotes.app.data.remote.GroqApi
+import com.audionotes.app.data.remote.LlmProvider
 import com.audionotes.app.data.remote.PromptFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,20 +14,31 @@ import java.io.IOException
 class SummaryException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Генератор конспекта через Groq (OpenAI-совместимый API).
+ * Генератор конспекта через OpenAI-совместимый API выбранного провайдера.
  *
  * Длинные лекции разбиваются на части, каждая обрабатывается отдельным запросом,
  * затем части объединяются финальным запросом (см. PRD, раздел 10).
  */
-class SummaryGenerator(private val api: GroqApi) {
+class SummaryGenerator(
+    private val api: GroqApi,
+    private val provider: LlmProvider,
+    private val apiKey: String,
+    private val model: String
+) {
+
+    private val effectiveModel: String
+        get() = model.ifBlank { provider.defaultModel }
 
     suspend fun generate(
         transcript: String,
         type: LectureType,
         onStage: (Stage) -> Unit = {}
     ): String = withContext(Dispatchers.IO) {
-        if (BuildConfig.GROQ_API_KEY.isBlank() || BuildConfig.GROQ_API_KEY.contains("YOUR_")) {
-            throw SummaryException("Не задан API-ключ Groq. Добавьте groq.api.key в local.properties.")
+        if (apiKey.isBlank()) {
+            throw SummaryException(
+                "Не задан API-ключ для ${provider.displayName}. " +
+                    "Откройте настройки и вставьте ключ — он бесплатно выдаётся в ${provider.consoleUrl}"
+            )
         }
         val text = transcript.trim()
         if (text.isEmpty()) throw SummaryException("Пустая расшифровка — нечего конспектировать.")
@@ -74,9 +85,34 @@ class SummaryGenerator(private val api: GroqApi) {
         }
     }
 
+    /**
+     * Проверка ключа и модели: минимальный запрос к API.
+     * Используется в настройках по кнопке «Проверить подключение».
+     */
+    suspend fun testConnection(): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) throw SummaryException("API-ключ не задан")
+        val request = ChatRequest(
+            model = effectiveModel,
+            messages = listOf(ChatMessage("user", "Ответь одним словом: ok")),
+            maxTokens = 16
+        )
+        val response = try {
+            api.createChatCompletion(request)
+        } catch (e: IOException) {
+            throw SummaryException("Ошибка сети при обращении к ${provider.displayName}", e)
+        } catch (e: retrofit2.HttpException) {
+            throw SummaryException(describeHttpError(e), e)
+        }
+        response.error?.let { error ->
+            throw SummaryException("${provider.displayName}: ${error.message ?: "неизвестная ошибка"}")
+        }
+        response.choices.firstOrNull()?.message?.content?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw SummaryException("${provider.displayName} вернул пустой ответ")
+    }
+
     private suspend fun chat(system: String, user: String): String {
         val request = ChatRequest(
-            model = BuildConfig.GROQ_MODEL,
+            model = effectiveModel,
             messages = listOf(
                 ChatMessage("system", system),
                 ChatMessage("user", user)
@@ -85,18 +121,36 @@ class SummaryGenerator(private val api: GroqApi) {
         val response = try {
             api.createChatCompletion(request)
         } catch (e: IOException) {
-            throw SummaryException("Ошибка сети при обращении к Groq API", e)
+            throw SummaryException("Ошибка сети при обращении к ${provider.displayName}", e)
         } catch (e: retrofit2.HttpException) {
-            val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
-            val detail = body?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
-            throw SummaryException("Groq API вернул ошибку ${e.code()}$detail", e)
+            throw SummaryException(describeHttpError(e), e)
         }
         response.error?.let { error ->
-            throw SummaryException("Groq API: ${error.message ?: "неизвестная ошибка"}")
+            throw SummaryException(
+                "${provider.displayName}: ${error.message ?: "неизвестная ошибка"}"
+            )
         }
         val content = response.choices.firstOrNull()?.message?.content
-        if (content.isNullOrBlank()) throw SummaryException("Groq API вернул пустой ответ")
+        if (content.isNullOrBlank()) throw SummaryException("${provider.displayName} вернул пустой ответ")
         return cleanUp(content)
+    }
+
+    private fun describeHttpError(e: retrofit2.HttpException): String {
+        val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
+        val detail = body?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+        return when (e.code()) {
+            401 -> "Ключ ${provider.displayName} отклонён (401). Проверьте ключ в настройках."
+            403 -> if (provider.worksFromRussia) {
+                "Доступ к ${provider.displayName} запрещён (403). Проверьте ключ или регион аккаунта."
+            } else {
+                "${provider.displayName} блокирует запросы из России (403). " +
+                    "Выберите другого провайдера в настройках или используйте VPN."
+            }
+
+            404 -> "Модель «$effectiveModel» не найдена у ${provider.displayName} (404). Проверьте название модели."
+            429 -> "Превышен лимит запросов ${provider.displayName} (429). Попробуйте позже."
+            else -> "${provider.displayName} вернул ошибку ${e.code()}$detail"
+        }
     }
 
     /** Убирает markdown-заглушки и «водяные» вступления. */

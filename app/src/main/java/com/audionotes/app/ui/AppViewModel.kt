@@ -10,6 +10,7 @@ import com.audionotes.app.data.RecordingRepository
 import com.audionotes.app.data.llm.SummaryException
 import com.audionotes.app.data.llm.SummaryGenerator
 import com.audionotes.app.data.model.LectureType
+import com.audionotes.app.data.remote.LlmProvider
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,15 @@ data class AppUiState(
     val notice: String? = null
 )
 
+/** Текущие параметры LLM-провайдера. */
+data class LlmSettings(
+    val provider: LlmProvider = LlmProvider.DEFAULT,
+    val apiKey: String = "",
+    val model: String = ""
+) {
+    val effectiveModel: String get() = model.ifBlank { provider.defaultModel }
+}
+
 /**
  * Общий ViewModel приложения: сессия записи, распознавание речи и генерация конспекта.
  */
@@ -60,7 +70,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: RecordingRepository =
         ServiceLocator.repository(application)
 
-    private val generator: SummaryGenerator = ServiceLocator.summaryGenerator()
+    private val settings = ServiceLocator.settings(application)
 
     private val recorder = AudioRecorder(application)
 
@@ -69,11 +79,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
+    private val _llmSettings = MutableStateFlow(LlmSettings())
+    val llmSettings: StateFlow<LlmSettings> = _llmSettings.asStateFlow()
+
     private val committed = StringBuilder()
     private var tickerJob: Job? = null
     private var pipelineJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            settings.provider.collect { provider ->
+                _llmSettings.update { it.copy(provider = provider) }
+            }
+        }
+        viewModelScope.launch {
+            settings.apiKey.collect { key ->
+                _llmSettings.update { it.copy(apiKey = key) }
+            }
+        }
+        viewModelScope.launch {
+            settings.model.collect { model ->
+                _llmSettings.update { it.copy(model = model) }
+            }
+        }
+
         transcriber.onText = { fragment ->
             committed.append(fragment).append(' ')
             _uiState.update {
@@ -226,6 +255,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             val type = entity.type
+            val config = _llmSettings.value
+            val generator: SummaryGenerator = ServiceLocator.summaryGenerator(
+                provider = config.provider,
+                apiKey = config.apiKey,
+                model = config.model
+            )
             _uiState.update { it.copy(processing = ProcessingState(id, ProcessingStep.GENERATING)) }
             repository.updateStatus(id, com.audionotes.app.data.model.RecordingStatus.GENERATING)
 
@@ -291,6 +326,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeCompleted() {
         _uiState.update { it.copy(completedRecordingId = null) }
+    }
+
+    // ------------------------------------------------------------- LLM-настройки
+
+    fun saveProvider(provider: LlmProvider) {
+        viewModelScope.launch { settings.setProvider(provider) }
+    }
+
+    fun saveApiKey(key: String) {
+        viewModelScope.launch { settings.setApiKey(key) }
+    }
+
+    fun saveModel(model: String) {
+        viewModelScope.launch { settings.setModel(model) }
+    }
+
+    /** Проверяет ключ и модель выбранного провайдера. */
+    fun testConnection(
+        provider: LlmProvider,
+        apiKey: String,
+        model: String,
+        onResult: (Result<String>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val generator = ServiceLocator.summaryGenerator(provider, apiKey, model)
+            val result = runCatching { generator.testConnection() }
+            onResult(result)
+        }
     }
 
     fun consumeNotice() {

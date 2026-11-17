@@ -5,9 +5,8 @@ import com.audionotes.app.BuildConfig
 import com.audionotes.app.data.RecordingRepository
 import com.audionotes.app.data.llm.SummaryGenerator
 import com.audionotes.app.data.local.AudioNotesDatabase
-import com.audionotes.app.data.remote.ChatRequest
-import com.audionotes.app.data.remote.ChatResponse
 import com.audionotes.app.data.remote.GroqApi
+import com.audionotes.app.data.remote.LlmProvider
 import com.audionotes.app.settings.SettingsRepository
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -45,19 +44,36 @@ object ServiceLocator {
             .build()
     }
 
-    private val groqApi: GroqApi by lazy {
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.GROQ_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(GroqApi::class.java)
-    }
-
     fun repository(context: Context): RecordingRepository =
         RecordingRepository(AudioNotesDatabase.get(context).recordingDao())
 
-    fun summaryGenerator(): SummaryGenerator = SummaryGenerator(groqApi)
+    /**
+     * Создаёт генератор конспекта для выбранного провайдера.
+     * Ключ передаётся в заголовке Authorization, базовый URL берётся у провайдера.
+     */
+    fun summaryGenerator(
+        provider: LlmProvider,
+        apiKey: String,
+        model: String
+    ): SummaryGenerator {
+        val client = okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
+
+        val api = Retrofit.Builder()
+            .baseUrl(provider.baseUrl)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(GroqApi::class.java)
+
+        return SummaryGenerator(api, provider, apiKey, model)
+    }
 
     fun settings(context: Context): SettingsRepository = SettingsRepository(context)
 }

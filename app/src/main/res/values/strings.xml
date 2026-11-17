@@ -41,15 +41,20 @@
     <string name="settings_title">Настройки</string>
     <string name="settings_theme">Тёмная тема</string>
     <string name="settings_version">Версия приложения</string>
-    <string name="settings_api">LLM: Groq · %1$s</string>
-    <string name="settings_api_missing">LLM: Groq · ключ не задан</string>
+    <string name="settings_llm_provider">LLM-провайдер</string>
+    <string name="settings_api_key">API-ключ</string>
+    <string name="settings_key_hint">Ключ хранится только на этом устройстве и не попадает в git</string>
+    <string name="settings_model">Модель (необязательно)</string>
+    <string name="settings_test">Проверить подключение</string>
+    <string name="settings_open_console">Где взять ключ</string>
+    <string name="settings_provider_blocked">Этот провайдер отдаёт 403 на запросы из России. Выберите другой или используйте VPN.</string>
 
     <string name="common_close">Закрыть</string>
     <string name="common_cancel">Отмена</string>
     <string name="common_back">Назад</string>
 
     <string name="error_network">Ошибка сети. Проверьте подключение и повторите.</string>
-    <string name="error_no_key">Не задан API-ключ Groq. Добавьте его в local.properties и пересоберите приложение.</string>
+    <string name="error_no_key">Не задан API-ключ. Откройте настройки и вставьте ключ выбранного провайдера.</string>
     <string name="error_permission_mic">Нужен доступ к микрофону для записи лекции.</string>
     <string name="error_record_failed">Не удалось начать запись</string>
     <string name="error_transcription_empty">Не удалось распознать речь на этом устройстве</string>

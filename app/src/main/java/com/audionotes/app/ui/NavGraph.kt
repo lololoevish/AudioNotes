@@ -37,6 +37,7 @@ fun AppNavHost(
 ) {
     val navController = rememberNavController()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val llmSettings by viewModel.llmSettings.collectAsStateWithLifecycle()
     val recordings by viewModel.recordingsFlow().collectAsStateWithLifecycle(emptyList())
 
     // Переход на экран обработки, как только запущен пайплайн.
@@ -122,7 +123,14 @@ fun AppNavHost(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 darkTheme = darkTheme,
+                llm = llmSettings,
                 onDarkThemeChange = onDarkThemeChange,
+                onProviderChange = viewModel::saveProvider,
+                onApiKeyChange = viewModel::saveApiKey,
+                onModelChange = viewModel::saveModel,
+                onTestConnection = { provider, apiKey, model, onResult ->
+                    viewModel.testConnection(provider, apiKey, model, onResult)
+                },
                 onBack = { navController.popBackStack() }
             )
         }
