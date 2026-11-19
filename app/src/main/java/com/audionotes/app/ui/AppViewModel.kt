@@ -4,7 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.audionotes.app.asr.SpeechTranscriber
-import com.audionotes.app.audio.AudioRecorder
+import com.audionotes.app.audio.RecordingBus
+import com.audionotes.app.audio.RecordingService
 import com.audionotes.app.core.ServiceLocator
 import com.audionotes.app.data.RecordingRepository
 import com.audionotes.app.data.llm.SummaryException
@@ -12,7 +13,6 @@ import com.audionotes.app.data.llm.SummaryGenerator
 import com.audionotes.app.data.model.LectureType
 import com.audionotes.app.data.remote.LlmProvider
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,8 +72,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settings = ServiceLocator.settings(application)
 
-    private val recorder = AudioRecorder(application)
-
     private val transcriber = SpeechTranscriber(application)
 
     private val _uiState = MutableStateFlow(AppUiState())
@@ -82,8 +80,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _llmSettings = MutableStateFlow(LlmSettings())
     val llmSettings: StateFlow<LlmSettings> = _llmSettings.asStateFlow()
 
-    private val committed = StringBuilder()
-    private var tickerJob: Job? = null
+    /** Расшифровка, накопленная во время последней записи. */
+    private var pendingTranscript: String = ""
+
+    /** true, пока запись ведётся сервисом. */
+    private var serviceEngaged: Boolean = false
     private var pipelineJob: Job? = null
 
     init {
@@ -103,20 +104,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        transcriber.onText = { fragment ->
-            committed.append(fragment).append(' ')
-            _uiState.update {
-                it.copy(
-                    committedChars = committed.length,
-                    liveTranscript = committed.toString()
-                )
+        // Живая запись идёт в foreground-сервисе, UI читает состояние из шины.
+        viewModelScope.launch {
+            RecordingBus.state.collect { state ->
+                _uiState.update { ui ->
+                    ui.copy(
+                        // Пока сервис не подтвердил старт, не даём шине сбросить
+                        // оптимистично установленный флаг записи.
+                        isRecording = if (serviceEngaged) state.isRecording else ui.isRecording,
+                        elapsedSec = if (serviceEngaged) state.elapsedSec else ui.elapsedSec,
+                        liveTranscript = if (serviceEngaged) state.transcript else ui.liveTranscript,
+                        committedChars = if (serviceEngaged) state.committedChars else ui.committedChars
+                    )
+                }
+
+                state.finished?.let { finished ->
+                    RecordingBus.consumeFinished()
+                    serviceEngaged = false
+                    pendingTranscript = finished.transcript
+                    _uiState.update {
+                        it.copy(
+                            isRecording = false,
+                            pendingAudioPath = finished.audioPath,
+                            pendingDurationSec = finished.durationSec,
+                            liveTranscript = finished.transcript,
+                            committedChars = finished.transcript.length
+                        )
+                    }
+                }
+
+                state.error?.let { error ->
+                    RecordingBus.consumeError()
+                    serviceEngaged = false
+                    _uiState.update { it.copy(isRecording = false, notice = error) }
+                }
             }
-        }
-        transcriber.onPartial = { partial ->
-            _uiState.update { it.copy(liveTranscript = committed.toString() + partial) }
-        }
-        transcriber.onFailure = { message ->
-            _uiState.update { it.copy(notice = message) }
         }
     }
 
@@ -124,14 +146,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startRecording() {
         if (_uiState.value.isRecording) return
-        committed.clear()
-        val file = try {
-            recorder.start()
-        } catch (e: Exception) {
-            _uiState.update { it.copy(notice = "Не удалось начать запись: ${e.message}") }
-            return
-        }
-        transcriber.start()
+        pendingTranscript = ""
+        serviceEngaged = true
         _uiState.update {
             it.copy(
                 isRecording = true,
@@ -143,41 +159,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 notice = null
             )
         }
-        tickerJob?.cancel()
-        tickerJob = viewModelScope.launch {
-            while (true) {
-                delay(1_000)
-                _uiState.update { state -> state.copy(elapsedSec = state.elapsedSec + 1) }
-            }
-        }
+        RecordingService.start(getApplication())
     }
 
     fun stopRecording() {
         if (!_uiState.value.isRecording) return
-        tickerJob?.cancel()
-        transcriber.stop()
-
-        val elapsed = _uiState.value.elapsedSec
-        val file = recorder.stop(elapsed * 1000)
-        if (file == null) {
-            _uiState.update {
-                it.copy(isRecording = false, notice = "Запись слишком короткая или микрофон недоступен")
-            }
-            return
-        }
-        _uiState.update {
-            it.copy(
-                isRecording = false,
-                pendingAudioPath = file.absolutePath,
-                pendingDurationSec = elapsed,
-                liveTranscript = committed.toString()
-            )
-        }
+        RecordingService.stop(getApplication())
     }
 
     fun discardPendingRecording() {
         _uiState.value.pendingAudioPath?.let { runCatching { File(it).delete() } }
-        committed.clear()
+        pendingTranscript = ""
         _uiState.update {
             it.copy(
                 pendingAudioPath = null,
@@ -216,7 +208,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun transcribe(id: String, type: LectureType) {
-        var transcript = committed.toString().trim()
+        var transcript = pendingTranscript.trim()
         val entity = repository.get(id)
 
         if (transcript.isEmpty()) {
@@ -370,11 +362,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Переименование лекции — заголовок записи. */
+    fun renameRecording(id: String, title: String) {
+        viewModelScope.launch { repository.updateTitle(id, title) }
+    }
+
     override fun onCleared() {
-        tickerJob?.cancel()
         pipelineJob?.cancel()
         transcriber.stop()
-        recorder.cancel()
+        // Записью владеет foreground-сервис: её нельзя прерывать при смерти ViewModel.
         super.onCleared()
     }
 

@@ -29,6 +29,8 @@
     <string name="result_saved">Сохранено в Загрузки: %1$s</string>
     <string name="result_save_failed">Не удалось сохранить файл</string>
     <string name="result_regenerate">Сгенерировать заново</string>
+    <string name="result_rename">Переименовать лекцию</string>
+    <string name="result_rename_title">Название лекции</string>
 
     <string name="transcript_title">Текст расшифровки</string>
     <string name="transcript_hint">Можно поправить формулы и термины перед генерацией</string>
@@ -55,8 +57,15 @@
     <string name="settings_key_missing">Ключ не задан</string>
     <string name="settings_provider_blocked">Этот провайдер отдаёт 403 на запросы из России. Выберите другой или используйте VPN.</string>
 
+    <string name="notification_channel_recording">Запись лекции</string>
+    <string name="notification_channel_recording_desc">Уведомление о текущей записи с таймером и кнопкой «Стоп»</string>
+    <string name="notification_recording_title">Идёт запись лекции</string>
+    <string name="notification_recording_text">%1$s · распознано символов: %2$d</string>
+    <string name="notification_stop">Стоп</string>
+
     <string name="common_close">Закрыть</string>
     <string name="common_cancel">Отмена</string>
+    <string name="common_save">Сохранить</string>
     <string name="common_back">Назад</string>
 
     <string name="error_network">Ошибка сети. Проверьте подключение и повторите.</string>

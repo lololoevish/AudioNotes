@@ -14,7 +14,7 @@
 | Язык / UI | Kotlin, Jetpack Compose, Material 3 |
 | Архитектура | MVVM (`AppViewModel` + `StateFlow`), ручной DI через `ServiceLocator` |
 | Хранилище | Room (метаданные и тексты) + файловая система (`files/audio/*.m4a`) |
-| Запись | `MediaRecorder`, AAC/M4A, 44.1 кГц, 128 кбит/с — рассчитано на 5-часовые сессии |
+| Запись | `MediaRecorder` в foreground-сервисе, AAC/M4A, 44.1 кГц, 128 кбит/с — на 5-часовые сессии |
 | Распознавание | `SpeechRecognizer` (on-device на Android 12+, обычный — ниже) |
 | LLM | OpenAI-совместимый API (`/chat/completions`), Retrofit + kotlinx.serialization |
 | Рендеринг `.md` | WebView + локальные `marked.js` и `MathJax` (без интернета) |
@@ -181,11 +181,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run-tests-ascii.ps1
   текст, после остановки выполняется fallback — разбор уже записанного файла через
   `EXTRA_AUDIO_SOURCE` (Android 12+). Если и он недоступен, приложение сообщает об этом,
   а запись остаётся доступной для прослушивания.
-* **Долгие записи** держатся на `FLAG_KEEP_SCREEN_ON`. Foreground-сервис для записи в фоне —
-  следующий шаг развития.
+* **Долгие записи** идут в foreground-сервисе (`RecordingService`, тип `microphone`): запись и
+  распознавание продолжаются, даже если свернуть приложение или погасить экран. В шторке —
+  уведомление с таймером, счётчиком символов и кнопкой «Стоп».
 * Таблицы в конспектах не поддерживаются (это требование PRD).
-* API-ключ вшит в `BuildConfig` — для демонстрации. В плане ввод ключа пользователем в
-  настройках либо переход на backend.
+* API-ключ вводится в настройках приложения и хранится в DataStore на устройстве; в коде его
+  нет. Переход на backend с серверным ключом — следующий шаг развития.
 
 ---
 
@@ -199,11 +200,13 @@ app/src/main/java/com/audionotes/app/
 ├── data/
 │   ├── local/                   — Room: сущность, DAO, база
 │   ├── model/                   — LectureType, RecordingStatus
-│   ├── remote/                  — Groq API, DTO, промпты (PRD, раздел 9)
+│   ├── remote/                  — LlmProvider, DTO, промпты (PRD, раздел 9)
 │   ├── llm/SummaryGenerator.kt  — чанкование, запросы, объединение
 │   └── RecordingRepository.kt
 ├── asr/SpeechTranscriber.kt     — SpeechRecognizer + fallback по файлу
 ├── audio/AudioRecorder.kt       — MediaRecorder (AAC/M4A)
+├── audio/RecordingService.kt    — foreground-сервис записи + уведомление
+├── audio/RecordingBus.kt        — состояние записи между сервисом и UI
 ├── export/MarkdownExporter.kt   — сохранение .md в «Загрузки» (MediaStore)
 ├── settings/SettingsRepository.kt
 └── ui/                          — экраны, навигация, ViewModel, тема

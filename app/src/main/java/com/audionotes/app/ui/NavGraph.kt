@@ -90,6 +90,7 @@ fun AppNavHost(
                 recording = recording,
                 onBack = { navController.popBackStack() },
                 onOpenTranscript = { transcriptId -> navController.navigate(Routes.transcript(transcriptId)) },
+                onRename = viewModel::renameRecording,
                 onRegenerate = viewModel::generate
             )
         }
