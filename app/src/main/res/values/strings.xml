@@ -24,6 +24,12 @@
     <string name="processing_retry">Повторить</string>
     <string name="processing_edit_transcript">Проверить текст</string>
     <string name="processing_continue">Продолжить</string>
+    <string name="processing_listen_title">Послушать и прочитать</string>
+    <string name="processing_listen_hint">Послушайте запись, затем прочитайте расшифровку — так видно, где распознавание ошиблось</string>
+    <string name="processing_listen_recording">Прослушать запись</string>
+    <string name="processing_read_transcript">Читать расшифровку</string>
+    <string name="processing_transcript_preview">Что распознано</string>
+    <string name="processing_decision_hint">Расшифровка готова. Проверьте формулы и термины перед отправкой в LLM.</string>
 
     <string name="result_save">Сохранить в .md</string>
     <string name="result_play">Прослушать запись</string>

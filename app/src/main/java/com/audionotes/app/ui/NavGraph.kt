@@ -82,7 +82,7 @@ fun AppNavHost(
                     }
                 },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onNotice = { }
+                onNotice = { message -> viewModel.showNotice(message) }
             )
         }
 

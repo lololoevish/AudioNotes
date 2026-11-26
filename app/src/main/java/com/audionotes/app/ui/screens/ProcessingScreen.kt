@@ -1,12 +1,14 @@
 package com.audionotes.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -37,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.audionotes.app.R
 import com.audionotes.app.ui.ProcessingState
 import com.audionotes.app.ui.ProcessingStep
+import com.audionotes.app.ui.components.AudioPlaybackControl
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +62,7 @@ fun ProcessingScreen(
         }
     }
 
+    var playbackError by remember { mutableStateOf<String?>(null) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -120,6 +127,86 @@ fun ProcessingScreen(
                 }
             }
 
+            // Прослушивание: сначала сама запись, потом — то, что из неё распознали.
+            if (processing.audioPath != null || processing.transcript.isNotBlank()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.processing_listen_title),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.processing_listen_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        val audioPath = processing.audioPath
+                        if (audioPath != null) {
+                            Spacer(Modifier.height(12.dp))
+                            AudioPlaybackControl(
+                                audioPath = audioPath,
+                                label = stringResource(R.string.processing_listen_recording),
+                                modifier = Modifier.fillMaxWidth(),
+                                onError = { message ->
+                                    playbackError = message
+                                    onNotice(message)
+                                }
+                            )
+                        }
+
+                        if (processing.transcript.isNotBlank()) {
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { onEditTranscript(processing.recordingId) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(stringResource(R.string.processing_read_transcript))
+                            }
+                        }
+
+                        playbackError?.let { message ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Что именно распознано — чтобы сверить с записью.
+            if (processing.transcript.isNotBlank()) {
+                Card {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.processing_transcript_preview),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                        ) {
+                            Column(Modifier.verticalScroll(rememberScrollState())) {
+                                Text(
+                                    text = processing.transcript,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (processing.step == ProcessingStep.AWAITING_DECISION) {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -128,7 +215,7 @@ fun ProcessingScreen(
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            text = "Расшифровка готова. Проверьте формулы и термины перед отправкой в LLM.",
+                            text = stringResource(R.string.processing_decision_hint),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(Modifier.height(12.dp))

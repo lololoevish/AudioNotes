@@ -38,7 +38,11 @@ data class ProcessingState(
     val step: ProcessingStep,
     val partIndex: Int = 0,
     val partTotal: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    /** Файл записи — чтобы можно было послушать её прямо во время обработки. */
+    val audioPath: String? = null,
+    /** Расшифровка — чтобы её можно было послушать и сверить с записью. */
+    val transcript: String = ""
 )
 
 data class AppUiState(
@@ -228,7 +232,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     pendingAudioPath = null,
                     pendingDurationSec = 0,
-                    processing = ProcessingState(id, ProcessingStep.TRANSCRIBING)
+                    processing = ProcessingState(
+                        recordingId = id,
+                        step = ProcessingStep.TRANSCRIBING,
+                        audioPath = path
+                    )
                 )
             }
             transcribe(id, type)
@@ -254,7 +262,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         repository.updateTranscript(id, transcript)
         repository.updateStatus(id, com.audionotes.app.data.model.RecordingStatus.TRANSCRIBING)
-        _uiState.update { it.copy(processing = ProcessingState(id, ProcessingStep.AWAITING_DECISION)) }
+        _uiState.update {
+            it.copy(
+                processing = ProcessingState(
+                    recordingId = id,
+                    step = ProcessingStep.AWAITING_DECISION,
+                    audioPath = entity?.audioFilePath,
+                    transcript = transcript
+                )
+            )
+        }
     }
 
     private suspend fun transcribeFile(file: File): Result<String> =
@@ -286,7 +303,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 model = config.model,
                 endpoint = config.endpoint
             )
-            _uiState.update { it.copy(processing = ProcessingState(id, ProcessingStep.GENERATING)) }
+            _uiState.update {
+                it.copy(
+                    processing = ProcessingState(
+                        recordingId = id,
+                        step = ProcessingStep.GENERATING,
+                        audioPath = entity.audioFilePath,
+                        transcript = entity.transcript
+                    )
+                )
+            }
             repository.updateStatus(id, com.audionotes.app.data.model.RecordingStatus.GENERATING)
 
             try {
@@ -335,7 +361,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val entity = repository.get(id) ?: return@launch
             repository.updateStatus(id, com.audionotes.app.data.model.RecordingStatus.TRANSCRIBING)
-            _uiState.update { it.copy(processing = ProcessingState(id, ProcessingStep.GENERATING)) }
+            _uiState.update {
+                it.copy(
+                    processing = ProcessingState(
+                        recordingId = id,
+                        step = ProcessingStep.GENERATING,
+                        audioPath = entity.audioFilePath,
+                        transcript = entity.transcript
+                    )
+                )
+            }
             generate(id)
         }
     }
