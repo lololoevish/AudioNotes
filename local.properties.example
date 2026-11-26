@@ -10,6 +10,8 @@ sdk.dir=C\:\\Android\\Sdk
 #   deepseek     - not free, but cheap
 #   mistral      - not free
 #   groq         - free, but returns 403 for Russian IPs (VPN required)
+#   custom       - your own OpenAI-compatible server (Ollama, vLLM, LM Studio);
+#                   the address is set in llm.endpoint, API key is not required
 llm.provider=cloudflare
 
 # Optional: pre-set API key. Usually better to enter it in the app's Settings screen.

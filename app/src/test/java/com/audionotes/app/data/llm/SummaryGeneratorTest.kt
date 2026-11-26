@@ -1,5 +1,6 @@
 package com.audionotes.app.data.llm
 
+import com.audionotes.app.core.ServiceLocator
 import com.audionotes.app.data.model.LectureType
 import com.audionotes.app.data.remote.LlmProvider
 import com.audionotes.app.data.remote.PromptFactory
@@ -15,6 +16,9 @@ class SummaryGeneratorTest {
                 request: com.audionotes.app.data.remote.ChatRequest
             ): com.audionotes.app.data.remote.ChatResponse =
                 com.audionotes.app.data.remote.ChatResponse()
+
+            override suspend fun listModels(): com.audionotes.app.data.remote.ModelsResponse =
+                com.audionotes.app.data.remote.ModelsResponse()
         },
         provider = LlmProvider.MISTRAL,
         apiKey = "test-key",
@@ -72,10 +76,46 @@ class SummaryGeneratorTest {
         LlmProvider.entries.forEach { provider ->
             assertTrue(
                 "Некорректный базовый URL у ${provider.id}",
-                provider.baseUrl.startsWith("https://") && provider.baseUrl.endsWith("/")
+                provider.baseUrl.startsWith("http") && provider.baseUrl.endsWith("/")
             )
-            assertTrue("Пустая модель по умолчанию у ${provider.id}", provider.defaultModel.isNotBlank())
+            // У своего сервера модель по умолчанию не задаётся: её выбирает пользователь.
+            if (!provider.baseUrlRequired) {
+                assertTrue("Пустая модель по умолчанию у ${provider.id}", provider.defaultModel.isNotBlank())
+            }
         }
+    }
+
+    @Test
+    fun `custom server address is normalized for retrofit`() {
+        assertEquals(
+            "http://192.168.1.10:11434/v1/",
+            ServiceLocator.normalizeBaseUrl("192.168.1.10:11434")
+        )
+        assertEquals(
+            "http://192.168.1.10:11434/v1/",
+            ServiceLocator.normalizeBaseUrl("http://192.168.1.10:11434")
+        )
+        assertEquals(
+            "https://example.com/api/v1/",
+            ServiceLocator.normalizeBaseUrl("https://example.com/api/v1")
+        )
+        assertEquals("", ServiceLocator.normalizeBaseUrl("   "))
+    }
+
+    @Test
+    fun `custom server does not require api key`() {
+        assertTrue(
+            "Своему серверу ключ не нужен",
+            !LlmProvider.CUSTOM.apiKeyRequired
+        )
+        assertTrue(
+            "Адрес своего сервера нужно ввести вручную",
+            LlmProvider.CUSTOM.baseUrlRequired
+        )
+        assertTrue(
+            "Свой сервер должен работать из России",
+            LlmProvider.CUSTOM.worksFromRussia
+        )
     }
 
     @Test

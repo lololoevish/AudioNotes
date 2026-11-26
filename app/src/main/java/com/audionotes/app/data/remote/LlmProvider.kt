@@ -24,7 +24,11 @@ enum class LlmProvider(
     val freeTierNote: String,
     val consoleUrl: String,
     val worksFromRussia: Boolean,
-    val needsAccountId: Boolean = false
+    val needsAccountId: Boolean = false,
+    /** Требуется ли API-ключ: у своего сервера он обычно не нужен. */
+    val apiKeyRequired: Boolean = true,
+    /** Требуется ли адрес сервера: у «своего сервера» его вводят вручную. */
+    val baseUrlRequired: Boolean = false
 ) {
     CLOUDFLARE(
         id = "cloudflare",
@@ -91,6 +95,25 @@ enum class LlmProvider(
         freeTierNote = "Бесплатный тариф, но из России отдаёт 403 — нужен VPN",
         consoleUrl = "https://console.groq.com/",
         worksFromRussia = false
+    ),
+
+    /**
+     * Собственный сервер с нейросетью: Ollama, vLLM, LM Studio, llama.cpp,
+     * TGI и любой другой OpenAI-совместимый API.
+     *
+     * Адрес и название модели вводятся пользователем, ключ обычно не требуется.
+     */
+    CUSTOM(
+        id = "custom",
+        displayName = "Свой сервер (OpenAI-совместимый)",
+        baseUrl = "http://127.0.0.1:11434/v1/",
+        defaultModel = "",
+        freeModels = emptyList(),
+        freeTierNote = "Ollama, vLLM, LM Studio: адрес и модель вводятся вручную",
+        consoleUrl = "https://ollama.com/library",
+        worksFromRussia = true,
+        apiKeyRequired = false,
+        baseUrlRequired = true
     );
 
     companion object {

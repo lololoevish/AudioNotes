@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Приложение умеет обращаться к собственному серверу с нейросетью
+    (Ollama, vLLM, LM Studio) по локальной сети, где обычно используется
+    обычный http без шифрования. Поэтому для обращений к провайдерам
+    разрешаем незашифрованный трафик.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

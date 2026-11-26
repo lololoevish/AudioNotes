@@ -62,10 +62,12 @@ object ServiceLocator {
     ): SummaryGenerator {
         val client = okHttpClient.newBuilder()
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
-                    .addHeader("Authorization", "Bearer $apiKey")
-                    .build()
-                chain.proceed(request)
+                val builder = chain.request().newBuilder()
+                // У своего сервера ключ обычно не нужен — заголовок не мешает.
+                if (apiKey.isNotBlank()) {
+                    builder.addHeader("Authorization", "Bearer $apiKey")
+                }
+                chain.proceed(builder.build())
             }
             .build()
 
@@ -79,14 +81,61 @@ object ServiceLocator {
         return SummaryGenerator(api, provider, apiKey, model)
     }
 
+    /**
+     * Загружает список моделей с OpenAI-совместимого сервера.
+     *
+     * Нужен, чтобы узнать точное название модели (например, `qwen2.5:7b` у Ollama)
+     * и не гадать его в настройках.
+     */
+    suspend fun listModels(endpoint: String, apiKey: String = ""): List<String> {
+        val baseUrl = normalizeBaseUrl(endpoint)
+        if (baseUrl.isEmpty()) throw IllegalArgumentException("Не указан адрес сервера")
+
+        val client = okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val builder = chain.request().newBuilder()
+                if (apiKey.isNotBlank()) builder.addHeader("Authorization", "Bearer $apiKey")
+                chain.proceed(builder.build())
+            }
+            .build()
+
+        val api = Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(GroqApi::class.java)
+
+        val response = api.listModels()
+        return response.data.map { it.displayName }.filter { it.isNotBlank() }.distinct()
+    }
+
     /** Собирает рабочий базовый URL: с учётом Account ID или переопределения. */
     fun resolveBaseUrl(provider: LlmProvider, endpoint: String): String {
         val value = endpoint.trim()
         return when {
             value.isEmpty() -> provider.baseUrl
             provider.needsAccountId -> provider.baseUrl.replace("{account_id}", value)
-            else -> if (value.endsWith("/")) value else "$value/"
+            else -> normalizeBaseUrl(value)
         }
+    }
+
+    /**
+     * Приводит адрес своего сервера к виду, пригодному для Retrofit:
+     * добавляет схему, путь `/v1` (если путь не задан) и слэш на конце.
+     *
+     * Пример: `192.168.1.10:11434` → `http://192.168.1.10:11434/v1/`.
+     */
+    fun normalizeBaseUrl(raw: String): String {
+        var url = raw.trim()
+        if (url.isEmpty()) return ""
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "http://$url"
+        }
+        if (!url.endsWith("/")) url = "$url/"
+        // Если путь не задан, OpenAI-совместимый API живёт на /v1.
+        val path = url.substringAfter("://").substringAfter('/', "")
+        return if (path.isEmpty()) "${url}v1/" else url
     }
 
     fun settings(context: Context): SettingsRepository = SettingsRepository(context)

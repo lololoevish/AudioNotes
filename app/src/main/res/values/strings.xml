@@ -65,6 +65,14 @@
     <string name="settings_free_models">Бесплатные модели</string>
     <string name="settings_free_models_hint">Выберите модель из бесплатного тарифа провайдера</string>
     <string name="settings_endpoint_saved">Параметры подключения сохранены</string>
+    <string name="settings_api_key_optional">API-ключ (необязательно)</string>
+    <string name="settings_key_hint_optional">Своему серверу ключ обычно не нужен — оставьте поле пустым</string>
+    <string name="settings_key_not_required">Ключ не требуется</string>
+    <string name="settings_model_required">Модель сервера (обязательно)</string>
+    <string name="settings_model_hint_custom">Точное название модели с сервера, например qwen2.5:7b</string>
+    <string name="settings_load_models">Загрузить модели с сервера</string>
+    <string name="settings_server_address">Адрес сервера</string>
+    <string name="settings_server_address_hint">Например http://192.168.1.10:11434 — путь /v1 добавится сам</string>
 
     <string name="notification_channel_recording">Запись лекции</string>
     <string name="notification_channel_recording_desc">Уведомление о текущей записи с таймером и кнопкой «Стоп»</string>

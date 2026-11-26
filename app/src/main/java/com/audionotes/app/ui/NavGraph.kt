@@ -140,6 +140,9 @@ fun AppNavHost(
                 onTestConnection = { provider, apiKey, model, endpoint, onResult ->
                     viewModel.testConnection(provider, apiKey, model, endpoint, onResult)
                 },
+                onLoadModels = { endpoint, apiKey, onResult ->
+                    viewModel.loadModels(endpoint, apiKey, onResult)
+                },
                 onBack = { navController.popBackStack() }
             )
         }

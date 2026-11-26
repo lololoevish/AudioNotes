@@ -276,6 +276,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             val type = entity.type
             val config = _llmSettings.value
+            validateConfig()?.let { message ->
+                fail(id, message)
+                return@launch
+            }
             val generator: SummaryGenerator = ServiceLocator.summaryGenerator(
                 provider = config.provider,
                 apiKey = config.apiKey,
@@ -377,10 +381,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onResult: (Result<String>) -> Unit
     ) {
         viewModelScope.launch {
+            val problem = validateConfig(provider, endpoint)
+            if (problem != null) {
+                onResult(Result.failure(IllegalStateException(problem)))
+                return@launch
+            }
             val generator = ServiceLocator.summaryGenerator(provider, apiKey, model, endpoint)
             val result = runCatching { generator.testConnection() }
             onResult(result)
         }
+    }
+
+    /**
+     * Загружает список моделей с OpenAI-совместимого сервера —
+     * чтобы выбрать точное название модели, а не угадывать его.
+     */
+    fun loadModels(
+        endpoint: String,
+        apiKey: String,
+        onResult: (Result<List<String>>) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (endpoint.isBlank()) {
+                onResult(Result.failure(IllegalStateException("Сначала укажите адрес сервера")))
+                return@launch
+            }
+            val result = runCatching { ServiceLocator.listModels(endpoint, apiKey) }
+            onResult(result)
+        }
+    }
+
+    /** Возвращает текст проблемы с настройками или null, если всё в порядке. */
+    private fun validateConfig(
+        provider: LlmProvider = _llmSettings.value.provider,
+        endpoint: String = _llmSettings.value.endpoint
+    ): String? {
+        if (provider.baseUrlRequired && endpoint.isBlank()) {
+            return "Укажите адрес своего сервера в настройках, например http://192.168.1.10:11434/v1"
+        }
+        return null
     }
 
     fun consumeNotice() {

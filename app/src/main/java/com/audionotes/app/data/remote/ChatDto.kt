@@ -37,3 +37,20 @@ data class ApiError(
     val type: String? = null,
     val code: String? = null
 )
+
+/** Ответ `GET /v1/models` — список моделей на сервере. */
+@Serializable
+data class ModelsResponse(
+    val data: List<ModelInfo> = emptyList(),
+    val error: ApiError? = null
+)
+
+@Serializable
+data class ModelInfo(
+    val id: String = "",
+    val name: String? = null
+) {
+    /** Ollama отдаёт `name`, OpenAI-совместимые серверы — `id`. */
+    val displayName: String
+        get() = name?.takeIf { it.isNotBlank() } ?: id
+}

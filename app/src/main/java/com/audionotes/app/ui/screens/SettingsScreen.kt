@@ -66,6 +66,7 @@ fun SettingsScreen(
     onModelChange: (String) -> Unit,
     onEndpointChange: (String) -> Unit,
     onTestConnection: (LlmProvider, String, String, String, (Result<String>) -> Unit) -> Unit,
+    onLoadModels: (String, String, (Result<List<String>>) -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -83,6 +84,14 @@ fun SettingsScreen(
     var modelMenuOpen by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+    // Модели, загруженные с собственного сервера.
+    var serverModels by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loadingModels by remember { mutableStateOf(false) }
+    var modelsHint by remember { mutableStateOf<String?>(null) }
+    // Адрес своего сервера — сохраняется при переключении провайдера туда-обратно.
+    var customAddress by rememberSaveable { mutableStateOf("") }
+
+    val isCustomServer = llm.provider.id == LlmProvider.CUSTOM.id
 
     val hasUnsavedChanges = keyInput != savedKey ||
         modelInput != savedModel ||
@@ -95,15 +104,29 @@ fun SettingsScreen(
         savedKey = keyInput.trim()
         savedModel = modelInput.trim()
         savedEndpoint = endpointInput.trim()
+        if (llm.provider.id == LlmProvider.CUSTOM.id) {
+            customAddress = endpointInput.trim()
+        }
     }
 
     // При смене провайдера Account ID от старого провайдера не подходит новому,
     // поэтому подключение чистим, а модель приводим к дефолту нового провайдера.
     fun applyProvider(provider: LlmProvider) {
         onProviderChange(provider)
-        endpointInput = ""
-        savedEndpoint = ""
-        onEndpointChange("")
+        if (provider.id == LlmProvider.CUSTOM.id) {
+            // Возвращаем адрес, если пользователь уже настраивал свой сервер.
+            val restored = if (endpointInput.isBlank()) customAddress else endpointInput
+            endpointInput = restored
+            savedEndpoint = restored
+            onEndpointChange(restored)
+        } else {
+            if (llm.provider.id == LlmProvider.CUSTOM.id) {
+                customAddress = endpointInput.trim()
+            }
+            endpointInput = ""
+            savedEndpoint = ""
+            onEndpointChange("")
+        }
         if (provider.freeModels.isNotEmpty() && provider.freeModels.none { it == modelInput.trim() }) {
             modelInput = provider.defaultModel
             savedModel = provider.defaultModel
@@ -211,7 +234,17 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = keyInput,
                 onValueChange = { keyInput = it },
-                label = { Text(stringResource(R.string.settings_api_key)) },
+                label = {
+                    Text(
+                        stringResource(
+                            if (isCustomServer) {
+                                R.string.settings_api_key_optional
+                            } else {
+                                R.string.settings_api_key
+                            }
+                        )
+                    )
+                },
                 singleLine = true,
                 visualTransformation = if (keyVisible) {
                     VisualTransformation.None
@@ -247,9 +280,20 @@ fun SettingsScreen(
                 },
                 supportingText = {
                     Column {
-                        Text(stringResource(R.string.settings_key_hint))
+                        Text(
+                            stringResource(
+                                if (isCustomServer) {
+                                    R.string.settings_key_hint_optional
+                                } else {
+                                    R.string.settings_key_hint
+                                }
+                            )
+                        )
                         Text(
                             text = when {
+                                keyInput.isBlank() && isCustomServer ->
+                                    stringResource(R.string.settings_key_not_required)
+
                                 keyInput.isBlank() -> stringResource(R.string.settings_key_missing)
                                 hasUnsavedChanges -> stringResource(R.string.settings_key_dirty)
                                 else -> stringResource(R.string.settings_key_saved)
@@ -275,9 +319,27 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = modelInput,
                 onValueChange = { modelInput = it },
-                label = { Text(stringResource(R.string.settings_model)) },
+                label = {
+                    Text(
+                        stringResource(
+                            if (isCustomServer) {
+                                R.string.settings_model_required
+                            } else {
+                                R.string.settings_model
+                            }
+                        )
+                    )
+                },
                 singleLine = true,
-                supportingText = { Text(llm.provider.defaultModel) },
+                supportingText = {
+                    Text(
+                        if (isCustomServer) {
+                            stringResource(R.string.settings_model_hint_custom)
+                        } else {
+                            llm.provider.defaultModel
+                        }
+                    )
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { state ->
@@ -285,15 +347,54 @@ fun SettingsScreen(
                     }
             )
 
-            if (llm.provider.freeModels.isNotEmpty()) {
+            if (isCustomServer) {
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        loadingModels = true
+                        modelsHint = null
+                        onLoadModels(endpointInput.trim(), keyInput.trim()) { result ->
+                            loadingModels = false
+                            result.onSuccess { models ->
+                                serverModels = models
+                                modelsHint = if (models.isEmpty()) {
+                                    "Сервер не вернул список моделей — введите название вручную"
+                                } else {
+                                    "Найдено моделей: ${models.size}"
+                                }
+                            }.onFailure { error ->
+                                modelsHint = "Не удалось получить модели: ${error.message ?: "ошибка сети"}"
+                            }
+                        }
+                    },
+                    enabled = !loadingModels
+                ) {
+                    Text(stringResource(R.string.settings_load_models))
+                }
+
+                modelsHint?.let { hint ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            val modelChoices = remember(serverModels, llm.provider) {
+                (llm.provider.freeModels + serverModels).distinct()
+            }
+
+            if (modelChoices.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
 
                 ExposedDropdownMenuBox(
                     expanded = modelMenuOpen,
                     onExpandedChange = { modelMenuOpen = it }
                 ) {
-                    val selectedFree = llm.provider.freeModels
-                        .firstOrNull { it == modelInput.trim() }
+                    val selectedFree = modelChoices.firstOrNull { it == modelInput.trim() }
                     OutlinedTextField(
                         value = selectedFree ?: stringResource(R.string.settings_free_models),
                         onValueChange = {},
@@ -311,7 +412,7 @@ fun SettingsScreen(
                         expanded = modelMenuOpen,
                         onDismissRequest = { modelMenuOpen = false }
                     ) {
-                        llm.provider.freeModels.forEach { freeModel ->
+                        modelChoices.forEach { freeModel ->
                             DropdownMenuItem(
                                 text = { Text(freeModel) },
                                 onClick = {
@@ -334,10 +435,10 @@ fun SettingsScreen(
                 label = {
                     Text(
                         stringResource(
-                            if (llm.provider.needsAccountId) {
-                                R.string.settings_account_id
-                            } else {
-                                R.string.settings_base_url
+                            when {
+                                llm.provider.needsAccountId -> R.string.settings_account_id
+                                isCustomServer -> R.string.settings_server_address
+                                else -> R.string.settings_base_url
                             }
                         )
                     )
@@ -346,10 +447,10 @@ fun SettingsScreen(
                 supportingText = {
                     Text(
                         stringResource(
-                            if (llm.provider.needsAccountId) {
-                                R.string.settings_account_id_hint
-                            } else {
-                                R.string.settings_base_url_hint
+                            when {
+                                llm.provider.needsAccountId -> R.string.settings_account_id_hint
+                                isCustomServer -> R.string.settings_server_address_hint
+                                else -> R.string.settings_base_url_hint
                             }
                         )
                     )

@@ -34,10 +34,16 @@ class SummaryGenerator(
         type: LectureType,
         onStage: (Stage) -> Unit = {}
     ): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
+        if (apiKey.isBlank() && provider.apiKeyRequired) {
             throw SummaryException(
                 "Не задан API-ключ для ${provider.displayName}. " +
                     "Откройте настройки и вставьте ключ — он бесплатно выдаётся в ${provider.consoleUrl}"
+            )
+        }
+        if (effectiveModel.isBlank()) {
+            throw SummaryException(
+                "Не указана модель для ${provider.displayName}. " +
+                    "Введите её название в настройках или выберите из списка моделей сервера."
             )
         }
         val text = transcript.trim()
@@ -90,7 +96,10 @@ class SummaryGenerator(
      * Используется в настройках по кнопке «Проверить подключение».
      */
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) throw SummaryException("API-ключ не задан")
+        if (apiKey.isBlank() && provider.apiKeyRequired) throw SummaryException("API-ключ не задан")
+        if (effectiveModel.isBlank()) {
+            throw SummaryException("Не указана модель — введите её название в настройках")
+        }
         val request = ChatRequest(
             model = effectiveModel,
             messages = listOf(ChatMessage("user", "Ответь одним словом: ok")),
