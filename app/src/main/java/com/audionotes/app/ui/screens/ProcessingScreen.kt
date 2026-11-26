@@ -58,7 +58,17 @@ fun ProcessingScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.processing_generating).substringBefore("…")) })
+            TopAppBar(
+                title = {
+                    // Заголовок отражает текущий шаг: во время распознавания
+                    // это ещё не «генерация конспекта».
+                    val titleRes = when (processing?.step) {
+                        ProcessingStep.TRANSCRIBING -> R.string.processing_title_transcribing
+                        else -> R.string.processing_title_generating
+                    }
+                    Text(stringResource(titleRes))
+                }
+            )
         }
     ) { padding ->
         Column(

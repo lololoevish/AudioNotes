@@ -50,11 +50,15 @@ object ServiceLocator {
     /**
      * Создаёт генератор конспекта для выбранного провайдера.
      * Ключ передаётся в заголовке Authorization, базовый URL берётся у провайдера.
+     *
+     * [endpoint] — для Cloudflare это Account ID (подставляется в шаблон URL),
+     * для остальных — необязательное переопределение базового URL.
      */
     fun summaryGenerator(
         provider: LlmProvider,
         apiKey: String,
-        model: String
+        model: String,
+        endpoint: String = ""
     ): SummaryGenerator {
         val client = okHttpClient.newBuilder()
             .addInterceptor { chain ->
@@ -66,13 +70,23 @@ object ServiceLocator {
             .build()
 
         val api = Retrofit.Builder()
-            .baseUrl(provider.baseUrl)
+            .baseUrl(resolveBaseUrl(provider, endpoint))
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(GroqApi::class.java)
 
         return SummaryGenerator(api, provider, apiKey, model)
+    }
+
+    /** Собирает рабочий базовый URL: с учётом Account ID или переопределения. */
+    fun resolveBaseUrl(provider: LlmProvider, endpoint: String): String {
+        val value = endpoint.trim()
+        return when {
+            value.isEmpty() -> provider.baseUrl
+            provider.needsAccountId -> provider.baseUrl.replace("{account_id}", value)
+            else -> if (value.endsWith("/")) value else "$value/"
+        }
     }
 
     fun settings(context: Context): SettingsRepository = SettingsRepository(context)

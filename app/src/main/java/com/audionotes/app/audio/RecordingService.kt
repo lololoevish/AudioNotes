@@ -70,7 +70,15 @@ class RecordingService : Service() {
         if (recorder != null) return
 
         // startForeground обязан быть вызван сразу после startForegroundService.
-        startForegroundCompat(buildNotification(elapsedSec = 0, chars = 0))
+        // На Android 14 он бросает SecurityException, если доступ к микрофону
+        // отозван, — ловим, иначе приложение упадёт.
+        try {
+            startForegroundCompat(buildNotification(elapsedSec = 0, chars = 0))
+        } catch (e: Exception) {
+            RecordingBus.onError("Не удалось запустить запись в фоне: ${e.message ?: "нет доступа к микрофону"}")
+            stopSelf()
+            return
+        }
 
         val audioRecorder = AudioRecorder(this)
         try {
@@ -96,7 +104,9 @@ class RecordingService : Service() {
             publishProgress(partial = partial)
         }
         speech.onFailure = { message ->
-            RecordingBus.onError(message)
+            // Распознаватель временно отвалился — запись продолжается,
+            // поэтому это предупреждение, а не ошибка.
+            RecordingBus.onWarning(message)
         }
         speech.start()
 
@@ -261,6 +271,9 @@ class RecordingService : Service() {
 
         fun stop(context: Context) {
             val intent = Intent(context, RecordingService::class.java).setAction(ACTION_STOP)
+            // Сервис обычно уже работает — startService просто доставит команду.
+            // Если сервис успели убить, а уведомление ещё висит, запуск из фона
+            // бросит исключение — его перехватит вызывающий код.
             context.startService(intent)
         }
     }

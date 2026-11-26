@@ -4,11 +4,20 @@
 # Android SDK location
 sdk.dir=C\:\\Android\\Sdk
 
-# Default LLM provider for the app: mistral | siliconflow | deepseek | github_models | groq
-llm.provider=mistral
+# Default LLM provider for the app:
+#   cloudflare   - free tier 10 000 neurons/day, works from Russia, needs Account ID
+#   siliconflow  - some models are free, works from Russia
+#   deepseek     - not free, but cheap
+#   mistral      - not free
+#   groq         - free, but returns 403 for Russian IPs (VPN required)
+llm.provider=cloudflare
 
 # Optional: pre-set API key. Usually better to enter it in the app's Settings screen.
 llm.api.key=
 
 # Optional: model override. Empty = provider default.
 llm.model=
+
+# Optional: Cloudflare Account ID (used for the Cloudflare Workers AI URL template)
+# or a full base URL override for other providers. Empty = provider default.
+llm.endpoint=

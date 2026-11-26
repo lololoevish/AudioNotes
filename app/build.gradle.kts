@@ -16,9 +16,11 @@ val localProperties = Properties().apply {
 fun secret(value: String?): String =
     (value ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
 
-val llmProviderId = localProperties.getProperty("llm.provider") ?: "mistral"
+val llmProviderId = localProperties.getProperty("llm.provider") ?: "cloudflare"
 val llmApiKey = secret(localProperties.getProperty("llm.api.key"))
 val llmModel = localProperties.getProperty("llm.model") ?: ""
+// Account ID (Cloudflare) либо переопределение базового URL.
+val llmEndpoint = secret(localProperties.getProperty("llm.endpoint"))
 
 android {
     namespace = "com.audionotes.app"
@@ -36,6 +38,7 @@ android {
         buildConfigField("String", "LLM_PROVIDER_ID", "\"$llmProviderId\"")
         buildConfigField("String", "LLM_API_KEY", "\"$llmApiKey\"")
         buildConfigField("String", "LLM_MODEL", "\"$llmModel\"")
+        buildConfigField("String", "LLM_ENDPOINT", "\"$llmEndpoint\"")
     }
 
     buildTypes {

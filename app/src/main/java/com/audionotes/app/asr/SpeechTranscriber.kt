@@ -13,18 +13,28 @@ import android.speech.SpeechRecognizer
 import java.io.File
 
 /**
- * Локальное распознавание речи на устройстве (без отправки аудио в сеть).
+ * Распознавание речи штатными средствами телефона — без единого API-ключа.
  *
- * Основной режим — непрерывное распознавание параллельно с записью.
- * Дополнительно поддерживается разбор уже готового аудиофайла
- * через [RecognizerIntent.EXTRA_AUDIO_SOURCE] (Android 12+).
+ * Используется тот же системный движок, на котором работают голосовой ввод
+ * Gboard и Яндекс.Клавиатуры, то есть отдельная подписка или ключ не нужны.
+ *
+ * Режимы:
+ * * [Mode.ON_DEVICE] — офлайн-модель на устройстве (Android 12+), аудио никуда не уходит.
+ * * [Mode.SYSTEM] — системный распознаватель (тот же, что у клавиатур), если
+ *   офлайн-модель не установлена или не поднимается.
  */
 class SpeechTranscriber(private val context: Context) {
+
+    enum class Mode { ON_DEVICE, SYSTEM }
 
     private val handler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var running = false
     private var restartsWithoutText = 0
+
+    /** Текущий режим распознавания. */
+    var mode: Mode = Mode.SYSTEM
+        private set
 
     /** Финальный распознанный фрагмент. */
     var onText: ((String) -> Unit)? = null
@@ -39,13 +49,25 @@ class SpeechTranscriber(private val context: Context) {
         get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
+    /** Доступен ли хоть какой-то распознаватель (офлайн или системный). */
+    val isAnyRecognizerAvailable: Boolean
+        get() = SpeechRecognizer.isRecognitionAvailable(context)
+
     // ------------------------------------------------------------------ live
 
     fun start() {
         if (running) return
         running = true
         restartsWithoutText = 0
-        handler.post { ensureRecognizer()?.startListening(buildIntent()) }
+        handler.post {
+            val rec = ensureRecognizer()
+            if (rec == null) {
+                running = false
+                return@post
+            }
+            runCatching { rec.startListening(buildIntent()) }
+                .onFailure { restart() }
+        }
     }
 
     fun stop() {
@@ -59,21 +81,45 @@ class SpeechTranscriber(private val context: Context) {
         }
     }
 
+    /**
+     * Создаёт распознаватель: сначала пробуем офлайн-модель, при неудаче —
+     * системный движок (он же голосовой ввод Gboard / Яндекс.Клавиатуры).
+     * Ни один из вариантов не требует ключа.
+     */
     private fun ensureRecognizer(): SpeechRecognizer? {
         recognizer?.let { return it }
-        val created = try {
-            if (isOnDeviceAvailable) {
+
+        if (isOnDeviceAvailable) {
+            val onDevice = try {
                 SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-            } else {
-                SpeechRecognizer.createSpeechRecognizer(context)
+            } catch (e: Exception) {
+                null
             }
-        } catch (e: Exception) {
-            onFailure?.invoke("SpeechRecognizer недоступен на этом устройстве")
-            return null
+            if (onDevice != null) {
+                onDevice.setRecognitionListener(listener)
+                recognizer = onDevice
+                mode = Mode.ON_DEVICE
+                return onDevice
+            }
         }
-        created.setRecognitionListener(listener)
-        recognizer = created
-        return created
+
+        val system = try {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        } catch (e: Exception) {
+            null
+        }
+        if (system != null) {
+            system.setRecognitionListener(listener)
+            recognizer = system
+            mode = Mode.SYSTEM
+            return system
+        }
+
+        onFailure?.invoke(
+            "На устройстве нет доступного распознавателя речи. " +
+                "Установите Google Speech Services или включите голосовой ввод в клавиатуре."
+        )
+        return null
     }
 
     private fun buildIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -95,18 +141,27 @@ class SpeechTranscriber(private val context: Context) {
 
         override fun onError(error: Int) {
             if (!running) return
-            // Нет речи / пауза — это штатная ситуация, просто продолжаем слушать.
-            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                restartsWithoutText++
-                if (restartsWithoutText > 20) {
-                    onFailure?.invoke("Не удалось распознать речь во время записи")
-                    running = false
-                    return
-                }
-                restart()
+
+            // Отказ в доступе к микрофону — восстановиться нельзя.
+            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                onFailure?.invoke(describeError(error))
+                running = false
                 return
             }
-            onFailure?.invoke(describeError(error))
+
+            // Остальные ошибки (микрофон занят, распознаватель busy, сбой сервиса,
+            // нет речи) — временные: продолжаем слушать, иначе расшифровка
+            // оборвётся на середине лекции.
+            restartsWithoutText++
+            if (restartsWithoutText > 40) {
+                onFailure?.invoke("Не удалось распознать речь во время записи")
+                running = false
+                return
+            }
+            if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                onFailure?.invoke(describeError(error))
+            }
+            restart()
         }
 
         override fun onResults(results: Bundle?) {
@@ -168,17 +223,29 @@ class SpeechTranscriber(private val context: Context) {
             onError("Разбор аудиофайла поддерживается начиная с Android 12")
             return
         }
+        val descriptor = try {
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+        } catch (e: Exception) {
+            onError("Не удалось открыть аудиофайл")
+            return
+        }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, descriptor)
         }
         val rec = try {
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         } catch (e: Exception) {
+            runCatching { descriptor.close() }
             onError("Офлайн-распознавание недоступно на этом устройстве")
             return
+        }
+        // Дескриптор закрываем вместе с распознавателем, иначе утекает файловый дескриптор.
+        val release = {
+            runCatching { rec.destroy() }
+            runCatching { descriptor.close() }
         }
         rec.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit
@@ -187,7 +254,7 @@ class SpeechTranscriber(private val context: Context) {
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() = Unit
             override fun onError(error: Int) {
-                runCatching { rec.destroy() }
+                release()
                 onError(describeError(error))
             }
 
@@ -197,7 +264,7 @@ class SpeechTranscriber(private val context: Context) {
                     ?.joinToString(" ")
                     ?.trim()
                     .orEmpty()
-                runCatching { rec.destroy() }
+                release()
                 if (text.isEmpty()) onError("Речь не распознана") else onResult(text)
             }
 

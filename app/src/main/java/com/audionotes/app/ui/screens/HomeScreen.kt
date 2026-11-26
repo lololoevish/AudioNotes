@@ -58,7 +58,8 @@ fun HomeScreen(
     onLectureTypeSelected: (LectureType) -> Unit,
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
-    onNoticeShown: () -> Unit
+    onNoticeShown: () -> Unit,
+    onMicDenied: () -> Unit
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -86,6 +87,9 @@ fun HomeScreen(
             } else {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        } else {
+            // Отказ в микрофоне — объясняем, что без него запись невозможна.
+            onMicDenied()
         }
     }
 

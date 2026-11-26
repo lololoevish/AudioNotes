@@ -9,11 +9,15 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 
@@ -22,6 +26,9 @@ import java.io.IOException
  *
  * Используется WebView с локальными библиотеками marked.js и MathJax
  * (лежат в assets/renderer) — интернет для отображения не требуется.
+ *
+ * Ассеты весят около 2 МБ, поэтому читаются в фоновом потоке: на главном
+ * потоке их чтение вызывало паузу интерфейса при первом открытии результата.
  */
 @Composable
 fun MarkdownContent(
@@ -30,13 +37,18 @@ fun MarkdownContent(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     val context = LocalContext.current
-    val assets = remember(context) {
-        runCatching {
-            readAsset(context, "renderer/marked.min.js") to readAsset(context, "renderer/tex-svg.js")
-        }.getOrNull()
+
+    // Актуальный текст нужен колбэку WebView, который создаётся один раз.
+    val currentMarkdown = rememberUpdatedState(markdown)
+
+    val assets by produceState<RendererAssets?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { loadAssets(context) }
     }
 
-    var rendered by remember { mutableStateOf<String?>(null) }
+    // Ключ загруженного HTML: тема + набор ассетов.
+    var htmlKey by remember { mutableStateOf<String?>(null) }
+    // Последний текст, отданный в рендерер, — чтобы не перерисовывать текст заново.
+    var renderedMarkdown by remember { mutableStateOf<String?>(null) }
 
     AndroidView(
         modifier = modifier,
@@ -52,23 +64,43 @@ fun MarkdownContent(
                 isVerticalScrollBarEnabled = true
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, url: String?) {
-                        val payload = JSONObject.quote(markdown)
+                        val payload = JSONObject.quote(currentMarkdown.value)
+                        renderedMarkdown = currentMarkdown.value
                         view.evaluateJavascript("window.renderMarkdown($payload);", null)
                     }
                 }
             }
         },
         update = { webView ->
-            val key = "$darkTheme|$markdown"
-            if (rendered != key) {
-                rendered = key
-                val html = assets?.let { (marked, mathJax) -> buildHtml(darkTheme, marked, mathJax) }
+            val key = "$darkTheme|${assets?.hashCode()}"
+            if (htmlKey != key) {
+                // Тема или набор ассетов изменились — перезагружаем страницу целиком.
+                htmlKey = key
+                renderedMarkdown = null
+                val html = assets?.let { buildHtml(darkTheme, it.markedJs, it.mathJaxJs) }
                     ?: buildFallbackHtml(darkTheme)
                 webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            } else if (renderedMarkdown != markdown) {
+                // Текст изменился — перерисовываем только содержимое, HTML не перезагружаем.
+                renderedMarkdown = markdown
+                val payload = JSONObject.quote(markdown)
+                webView.evaluateJavascript("window.renderMarkdown($payload);", null)
             }
         }
     )
 }
+
+/** Локальные библиотеки рендерера, прочитанные с ассетов. */
+private data class RendererAssets(val markedJs: String, val mathJaxJs: String)
+
+/** Читает библиотеки рендерера. Вызывается вне главного потока. */
+private fun loadAssets(context: Context): RendererAssets? =
+    runCatching {
+        RendererAssets(
+            markedJs = readAsset(context, "renderer/marked.min.js"),
+            mathJaxJs = readAsset(context, "renderer/tex-svg.js")
+        )
+    }.getOrNull()
 
 private fun readAsset(context: Context, path: String): String =
     try {

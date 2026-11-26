@@ -3,6 +3,7 @@ package com.audionotes.app.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -10,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.audionotes.app.R
 import com.audionotes.app.ui.screens.HistoryScreen
 import com.audionotes.app.ui.screens.HomeScreen
 import com.audionotes.app.ui.screens.ProcessingScreen
@@ -36,6 +38,7 @@ fun AppNavHost(
     onDarkThemeChange: (Boolean) -> Unit
 ) {
     val navController = rememberNavController()
+    val appContext = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val llmSettings by viewModel.llmSettings.collectAsStateWithLifecycle()
     val recordings by viewModel.recordingsFlow().collectAsStateWithLifecycle(emptyList())
@@ -58,7 +61,10 @@ fun AppNavHost(
                 onLectureTypeSelected = viewModel::onLectureTypeSelected,
                 onOpenHistory = { navController.navigate(Routes.HISTORY) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onNoticeShown = viewModel::consumeNotice
+                onNoticeShown = viewModel::consumeNotice,
+                onMicDenied = {
+                    viewModel.showNotice(appContext.getString(R.string.error_mic_denied))
+                }
             )
         }
 
@@ -130,8 +136,9 @@ fun AppNavHost(
                 onProviderChange = viewModel::saveProvider,
                 onApiKeyChange = viewModel::saveApiKey,
                 onModelChange = viewModel::saveModel,
-                onTestConnection = { provider, apiKey, model, onResult ->
-                    viewModel.testConnection(provider, apiKey, model, onResult)
+                onEndpointChange = viewModel::saveEndpoint,
+                onTestConnection = { provider, apiKey, model, endpoint, onResult ->
+                    viewModel.testConnection(provider, apiKey, model, endpoint, onResult)
                 },
                 onBack = { navController.popBackStack() }
             )

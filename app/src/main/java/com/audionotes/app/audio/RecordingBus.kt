@@ -17,7 +17,8 @@ data class RecordingState(
     val transcript: String = "",
     val committedChars: Int = 0,
     val finished: Finished? = null,
-    val error: String? = null
+    val error: String? = null,
+    val warning: String? = null
 ) {
     data class Finished(
         val audioPath: String?,
@@ -61,6 +62,22 @@ object RecordingBus {
 
     fun onError(message: String) {
         _state.update { it.copy(isRecording = false, error = message) }
+    }
+
+    /**
+     * Предупреждение: запись продолжается, но что-то пошло не так
+     * (например, распознаватель временно отвалился).
+     */
+    fun onWarning(message: String) {
+        _state.update { it.copy(warning = message) }
+    }
+
+    fun consumeWarning(): String? {
+        val message = _state.value.warning
+        if (message != null) {
+            _state.update { it.copy(warning = null) }
+        }
+        return message
     }
 
     /** Забирает результат остановки, чтобы он не обрабатывался дважды. */

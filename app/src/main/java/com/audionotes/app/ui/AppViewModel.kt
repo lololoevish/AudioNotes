@@ -57,7 +57,8 @@ data class AppUiState(
 data class LlmSettings(
     val provider: LlmProvider = LlmProvider.DEFAULT,
     val apiKey: String = "",
-    val model: String = ""
+    val model: String = "",
+    val endpoint: String = ""
 ) {
     val effectiveModel: String get() = model.ifBlank { provider.defaultModel }
 }
@@ -103,6 +104,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _llmSettings.update { it.copy(model = model) }
             }
         }
+        viewModelScope.launch {
+            settings.endpoint.collect { endpoint ->
+                _llmSettings.update { it.copy(endpoint = endpoint) }
+            }
+        }
 
         // Живая запись идёт в foreground-сервисе, UI читает состояние из шины.
         viewModelScope.launch {
@@ -138,6 +144,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     serviceEngaged = false
                     _uiState.update { it.copy(isRecording = false, notice = error) }
                 }
+
+                // Предупреждение не прерывает запись — только показываем текст.
+                state.warning?.let { warning ->
+                    RecordingBus.consumeWarning()
+                    _uiState.update { it.copy(notice = warning) }
+                }
             }
         }
     }
@@ -159,12 +171,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 notice = null
             )
         }
-        RecordingService.start(getApplication())
+        try {
+            RecordingService.start(getApplication())
+        } catch (e: Exception) {
+            serviceEngaged = false
+            _uiState.update {
+                it.copy(
+                    isRecording = false,
+                    notice = "Не удалось запустить запись: ${e.message ?: "неизвестная ошибка"}"
+                )
+            }
+        }
     }
 
     fun stopRecording() {
         if (!_uiState.value.isRecording) return
-        RecordingService.stop(getApplication())
+        try {
+            RecordingService.stop(getApplication())
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(notice = "Не удалось остановить запись: ${e.message ?: "неизвестная ошибка"}")
+            }
+        }
     }
 
     fun discardPendingRecording() {
@@ -251,7 +279,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val generator: SummaryGenerator = ServiceLocator.summaryGenerator(
                 provider = config.provider,
                 apiKey = config.apiKey,
-                model = config.model
+                model = config.model,
+                endpoint = config.endpoint
             )
             _uiState.update { it.copy(processing = ProcessingState(id, ProcessingStep.GENERATING)) }
             repository.updateStatus(id, com.audionotes.app.data.model.RecordingStatus.GENERATING)
@@ -334,15 +363,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settings.setModel(model) }
     }
 
+    /** Account ID (Cloudflare) либо переопределение базового URL. */
+    fun saveEndpoint(endpoint: String) {
+        viewModelScope.launch { settings.setEndpoint(endpoint) }
+    }
+
     /** Проверяет ключ и модель выбранного провайдера. */
     fun testConnection(
         provider: LlmProvider,
         apiKey: String,
         model: String,
+        endpoint: String,
         onResult: (Result<String>) -> Unit
     ) {
         viewModelScope.launch {
-            val generator = ServiceLocator.summaryGenerator(provider, apiKey, model)
+            val generator = ServiceLocator.summaryGenerator(provider, apiKey, model, endpoint)
             val result = runCatching { generator.testConnection() }
             onResult(result)
         }
@@ -350,6 +385,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeNotice() {
         _uiState.update { it.copy(notice = null) }
+    }
+
+    /** Показать произвольное уведомление пользователю. */
+    fun showNotice(text: String) {
+        _uiState.update { it.copy(notice = text) }
     }
 
     fun recordingsFlow() = repository.observeAll()

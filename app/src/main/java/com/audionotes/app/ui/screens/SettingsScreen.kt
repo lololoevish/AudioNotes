@@ -64,7 +64,8 @@ fun SettingsScreen(
     onProviderChange: (LlmProvider) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onModelChange: (String) -> Unit,
-    onTestConnection: (LlmProvider, String, String, (Result<String>) -> Unit) -> Unit,
+    onEndpointChange: (String) -> Unit,
+    onTestConnection: (LlmProvider, String, String, String, (Result<String>) -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -73,20 +74,42 @@ fun SettingsScreen(
     // иначе курсор в поле прыгает и ключ невозможно напечатать.
     var keyInput by rememberSaveable { mutableStateOf(llm.apiKey) }
     var modelInput by rememberSaveable { mutableStateOf(llm.model) }
+    var endpointInput by rememberSaveable { mutableStateOf(llm.endpoint) }
     var savedKey by rememberSaveable { mutableStateOf(llm.apiKey) }
     var savedModel by rememberSaveable { mutableStateOf(llm.model) }
+    var savedEndpoint by rememberSaveable { mutableStateOf(llm.endpoint) }
     var keyVisible by rememberSaveable { mutableStateOf(false) }
     var providerMenuOpen by remember { mutableStateOf(false) }
+    var modelMenuOpen by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
 
-    val hasUnsavedChanges = keyInput != savedKey || modelInput != savedModel
+    val hasUnsavedChanges = keyInput != savedKey ||
+        modelInput != savedModel ||
+        endpointInput != savedEndpoint
 
     fun saveAll() {
         onApiKeyChange(keyInput.trim())
         onModelChange(modelInput.trim())
+        onEndpointChange(endpointInput.trim())
         savedKey = keyInput.trim()
         savedModel = modelInput.trim()
+        savedEndpoint = endpointInput.trim()
+    }
+
+    // При смене провайдера Account ID от старого провайдера не подходит новому,
+    // поэтому подключение чистим, а модель приводим к дефолту нового провайдера.
+    fun applyProvider(provider: LlmProvider) {
+        onProviderChange(provider)
+        endpointInput = ""
+        savedEndpoint = ""
+        onEndpointChange("")
+        if (provider.freeModels.isNotEmpty() && provider.freeModels.none { it == modelInput.trim() }) {
+            modelInput = provider.defaultModel
+            savedModel = provider.defaultModel
+            onModelChange(provider.defaultModel)
+        }
+        providerMenuOpen = false
     }
 
     Scaffold(
@@ -167,8 +190,7 @@ fun SettingsScreen(
                                 }
                             },
                             onClick = {
-                                onProviderChange(provider)
-                                providerMenuOpen = false
+                                applyProvider(provider)
                             }
                         )
                     }
@@ -263,6 +285,82 @@ fun SettingsScreen(
                     }
             )
 
+            if (llm.provider.freeModels.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = modelMenuOpen,
+                    onExpandedChange = { modelMenuOpen = it }
+                ) {
+                    val selectedFree = llm.provider.freeModels
+                        .firstOrNull { it == modelInput.trim() }
+                    OutlinedTextField(
+                        value = selectedFree ?: stringResource(R.string.settings_free_models),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.settings_free_models)) },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuOpen)
+                        },
+                        supportingText = { Text(stringResource(R.string.settings_free_models_hint)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = modelMenuOpen,
+                        onDismissRequest = { modelMenuOpen = false }
+                    ) {
+                        llm.provider.freeModels.forEach { freeModel ->
+                            DropdownMenuItem(
+                                text = { Text(freeModel) },
+                                onClick = {
+                                    modelInput = freeModel
+                                    savedModel = freeModel
+                                    onModelChange(freeModel)
+                                    modelMenuOpen = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = endpointInput,
+                onValueChange = { endpointInput = it },
+                label = {
+                    Text(
+                        stringResource(
+                            if (llm.provider.needsAccountId) {
+                                R.string.settings_account_id
+                            } else {
+                                R.string.settings_base_url
+                            }
+                        )
+                    )
+                },
+                singleLine = true,
+                supportingText = {
+                    Text(
+                        stringResource(
+                            if (llm.provider.needsAccountId) {
+                                R.string.settings_account_id_hint
+                            } else {
+                                R.string.settings_base_url_hint
+                            }
+                        )
+                    )
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        if (!state.isFocused && endpointInput.trim() != savedEndpoint) saveAll()
+                    }
+            )
+
             Spacer(Modifier.height(16.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -276,7 +374,12 @@ fun SettingsScreen(
                     onClick = {
                         testing = true
                         testResult = null
-                        onTestConnection(llm.provider, keyInput.trim(), modelInput.trim()) { result ->
+                        onTestConnection(
+                            llm.provider,
+                            keyInput.trim(),
+                            modelInput.trim(),
+                            endpointInput.trim()
+                        ) { result ->
                             testing = false
                             testResult = result.fold(
                                 onSuccess = { "OK: $it" },

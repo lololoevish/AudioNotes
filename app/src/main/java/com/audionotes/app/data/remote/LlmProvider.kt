@@ -6,26 +6,42 @@ package com.audionotes.app.data.remote
  * Все перечисленные работают по протоколу `POST /chat/completions`, поэтому
  * меняется только базовый URL и модель.
  *
- * Проверено из России (октябрь 2026, IP московского провайдера):
- * Groq отдаёт `403 Forbidden` на edge, остальные — живой API (401 без ключа).
+ * Доступность проверена из России (октябрь 2026, IP московского провайдера) —
+ * запрос доходил до авторизации провайдера, то есть гео-блокировки не было.
+ *
+ * - [CLOUDFLARE] — бесплатно 10 000 нейронов в сутки, без карты.
+ * - [SILICONFLOW] — часть моделей бесплатна (¥0), но регистрация может
+ *   требовать номер телефона КНР.
+ * - [GROQ] — бесплатный тариф есть, но IP из России отсекается (403).
+ * - [MISTRAL], [DEEPSEEK] — не бесплатны, оставлены как запасные варианты.
  */
 enum class LlmProvider(
     val id: String,
     val displayName: String,
     val baseUrl: String,
     val defaultModel: String,
+    val freeModels: List<String>,
     val freeTierNote: String,
     val consoleUrl: String,
-    val worksFromRussia: Boolean
+    val worksFromRussia: Boolean,
+    val needsAccountId: Boolean = false
 ) {
-    MISTRAL(
-        id = "mistral",
-        displayName = "Mistral AI",
-        baseUrl = "https://api.mistral.ai/v1/",
-        defaultModel = "mistral-small-latest",
-        freeTierNote = "Бесплатный тариф Experimentations, карта не нужна",
-        consoleUrl = "https://console.mistral.ai/",
-        worksFromRussia = true
+    CLOUDFLARE(
+        id = "cloudflare",
+        displayName = "Cloudflare Workers AI",
+        baseUrl = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/",
+        defaultModel = "@cf/meta/llama-3.1-8b-instruct-fast",
+        freeModels = listOf(
+            "@cf/meta/llama-3.1-8b-instruct-fast",
+            "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+            "@cf/zai-org/glm-4.7-flash",
+            "@cf/google/gemma-4-26b-a4b-it",
+            "@cf/openai/gpt-oss-120b"
+        ),
+        freeTierNote = "Бесплатно 10 000 нейронов в сутки, карта не нужна",
+        consoleUrl = "https://dash.cloudflare.com/",
+        worksFromRussia = true,
+        needsAccountId = true
     ),
 
     SILICONFLOW(
@@ -33,7 +49,13 @@ enum class LlmProvider(
         displayName = "SiliconFlow",
         baseUrl = "https://api.siliconflow.cn/v1/",
         defaultModel = "Qwen/Qwen3-8B",
-        freeTierNote = "Есть бесплатные модели с пометкой ¥0",
+        freeModels = listOf(
+            "Qwen/Qwen3-8B",
+            "Qwen/Qwen2.5-7B-Instruct",
+            "THUDM/glm-4-9b-chat",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+        ),
+        freeTierNote = "Есть модели с ценой ¥0; регистрация может требовать номер КНР",
         consoleUrl = "https://cloud.siliconflow.cn/",
         worksFromRussia = true
     ),
@@ -43,18 +65,20 @@ enum class LlmProvider(
         displayName = "DeepSeek",
         baseUrl = "https://api.deepseek.com/v1/",
         defaultModel = "deepseek-chat",
-        freeTierNote = "Платный, но самый дешёвый из списка",
+        freeModels = emptyList(),
+        freeTierNote = "Не бесплатный, но самый дешёвый из списка",
         consoleUrl = "https://platform.deepseek.com/",
         worksFromRussia = true
     ),
 
-    GITHUB_MODELS(
-        id = "github_models",
-        displayName = "GitHub Models",
-        baseUrl = "https://models.github.ai/inference/",
-        defaultModel = "openai/gpt-4o-mini",
-        freeTierNote = "Бесплатно по токену GitHub, есть лимиты в сутки",
-        consoleUrl = "https://github.com/settings/tokens",
+    MISTRAL(
+        id = "mistral",
+        displayName = "Mistral AI",
+        baseUrl = "https://api.mistral.ai/v1/",
+        defaultModel = "mistral-small-latest",
+        freeModels = emptyList(),
+        freeTierNote = "Бесплатный тариф с лимитами; по отзывам бывают проблемы из РФ",
+        consoleUrl = "https://console.mistral.ai/",
         worksFromRussia = true
     ),
 
@@ -63,15 +87,16 @@ enum class LlmProvider(
         displayName = "Groq",
         baseUrl = "https://api.groq.com/openai/v1/",
         defaultModel = "llama-3.3-70b-versatile",
+        freeModels = emptyList(),
         freeTierNote = "Бесплатный тариф, но из России отдаёт 403 — нужен VPN",
         consoleUrl = "https://console.groq.com/",
         worksFromRussia = false
     );
 
     companion object {
-        val DEFAULT: LlmProvider = MISTRAL
+        val DEFAULT: LlmProvider = CLOUDFLARE
 
-        /** Провайдер по умолчанию: из local.properties, иначе — Mistral. */
+        /** Провайдер по умолчанию: из local.properties, иначе — Cloudflare. */
         fun default(): LlmProvider =
             entries.firstOrNull { it.id == com.audionotes.app.BuildConfig.LLM_PROVIDER_ID }
                 ?: DEFAULT

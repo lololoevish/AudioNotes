@@ -1,6 +1,11 @@
 package com.audionotes.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.AlertDialog
@@ -42,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.audionotes.app.R
 import com.audionotes.app.data.local.RecordingEntity
 import com.audionotes.app.export.MarkdownExporter
@@ -65,6 +72,35 @@ fun ResultScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
     var titleInput by remember(recording?.id) { mutableStateOf(recording?.title.orEmpty()) }
+
+    val performSave: () -> Unit = {
+        val md = recording?.summaryMd.orEmpty()
+        if (md.isNotBlank()) {
+            val fileName = recording?.title ?: "конспект"
+            scope.launch {
+                val result = MarkdownExporter.saveToDownloads(context, fileName, md)
+                snackbarHostState.showSnackbar(
+                    result.fold(
+                        onSuccess = { context.getString(R.string.result_saved, it.lastPathSegment ?: fileName) },
+                        onFailure = { context.getString(R.string.result_save_failed) }
+                    )
+                )
+            }
+        }
+    }
+
+    // На Android 8–9 запись в «Загрузки» требует runtime-разрешения.
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            performSave()
+        } else {
+            scope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.error_storage_permission))
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -101,6 +137,12 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { recording?.let { onRegenerate(it.id) } }) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = stringResource(R.string.result_regenerate)
+                        )
+                    }
                     IconButton(onClick = { renameOpen = true }) {
                         Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.result_rename))
                     }
@@ -118,17 +160,16 @@ fun ResultScreen(
                 ) {
                     FilledTonalIconButton(
                         onClick = {
-                            val md = recording?.summaryMd.orEmpty()
-                            if (md.isBlank()) return@FilledTonalIconButton
-                            val fileName = (recording?.title ?: "конспект")
-                            scope.launch {
-                                val result = MarkdownExporter.saveToDownloads(context, fileName, md)
-                                snackbarHostState.showSnackbar(
-                                    result.fold(
-                                        onSuccess = { context.getString(R.string.result_saved, it.lastPathSegment ?: fileName) },
-                                        onFailure = { context.getString(R.string.result_save_failed) }
-                                    )
-                                )
+                            val needsPermission = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                ) != PackageManager.PERMISSION_GRANTED
+
+                            if (needsPermission) {
+                                storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            } else {
+                                performSave()
                             }
                         }
                     ) {
@@ -144,13 +185,17 @@ fun ResultScreen(
                                 runCatching {
                                     MediaPlayer().apply {
                                         setDataSource(path)
-                                        prepare()
-                                        start()
+                                        // Подготовка асинхронная: на 5-часовом файле
+                                        // синхронный prepare() вешал бы интерфейс.
+                                        setOnPreparedListener { prepared ->
+                                            prepared.start()
+                                            isPlaying = true
+                                        }
                                         setOnCompletionListener { isPlaying = false }
+                                        prepareAsync()
                                     }
                                 }.onSuccess {
                                     player = it
-                                    isPlaying = true
                                 }
                             } else if (isPlaying) {
                                 current.pause()
@@ -191,7 +236,7 @@ fun ResultScreen(
 
             MarkdownContent(
                 markdown = recording.summaryMd.ifBlank {
-                    "Конспект ещё не готов. Нажмите «Сгенерировать заново», чтобы повторить запрос."
+                    "Конспект ещё не готов. Нажмите кнопку обновления вверху, чтобы повторить запрос."
                 },
                 modifier = Modifier
                     .fillMaxSize()

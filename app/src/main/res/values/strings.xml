@@ -17,6 +17,8 @@
 
     <string name="processing_transcribing">Распознавание аудио…</string>
     <string name="processing_generating">Генерация конспекта…</string>
+    <string name="processing_title_transcribing">Распознавание аудио</string>
+    <string name="processing_title_generating">Генерация конспекта</string>
     <string name="processing_merging">Сведение частей конспекта…</string>
     <string name="processing_hint">Не выключайте приложение — обработка идёт в фоне</string>
     <string name="processing_retry">Повторить</string>
@@ -56,6 +58,13 @@
     <string name="settings_key_dirty">Есть несохранённые изменения — нажмите «Сохранить»</string>
     <string name="settings_key_missing">Ключ не задан</string>
     <string name="settings_provider_blocked">Этот провайдер отдаёт 403 на запросы из России. Выберите другой или используйте VPN.</string>
+    <string name="settings_account_id">Account ID (Cloudflare)</string>
+    <string name="settings_account_id_hint">Найдите в панели Cloudflare: Workers &amp; Pages → Workers AI → Account ID</string>
+    <string name="settings_base_url">Базовый URL (необязательно)</string>
+    <string name="settings_base_url_hint">Оставьте пустым, чтобы использовать адрес провайдера по умолчанию</string>
+    <string name="settings_free_models">Бесплатные модели</string>
+    <string name="settings_free_models_hint">Выберите модель из бесплатного тарифа провайдера</string>
+    <string name="settings_endpoint_saved">Параметры подключения сохранены</string>
 
     <string name="notification_channel_recording">Запись лекции</string>
     <string name="notification_channel_recording_desc">Уведомление о текущей записи с таймером и кнопкой «Стоп»</string>
@@ -73,4 +82,6 @@
     <string name="error_permission_mic">Нужен доступ к микрофону для записи лекции.</string>
     <string name="error_record_failed">Не удалось начать запись</string>
     <string name="error_transcription_empty">Не удалось распознать речь на этом устройстве</string>
+    <string name="error_storage_permission">Нужен доступ к файлам, чтобы сохранить конспект в «Загрузки»</string>
+    <string name="error_mic_denied">Доступ к микрофону не выдан. Разрешите его в настройках приложения.</string>
 </resources>

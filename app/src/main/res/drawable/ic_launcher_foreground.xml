@@ -3,10 +3,38 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Корпус микрофона -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M54,30m-9,0a9,9 0,1 1,18 0l0,16a9,9 0,1 1,-18 0z" />
+        android:pathData="M46,30 a8,8 0 0 1 16,0 v14 a8,8 0 0 1 -16,0 z" />
+    <!-- Дужка: полуэллипс под корпусом -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M33,52 a21,17 0 0 0 42,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <!-- Стойка -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,69 v8"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <!-- Основание -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M44,77 h20"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <!-- Строчки конспекта справа -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M39,44h4a11,11 0,0 0,22 0h4a15,15 0,0 1,-13 14.8v7.2h7v4h-22v-4h7v-7.2A15,15 0,0 1,39 44z" />
+        android:fillAlpha="0.9"
+        android:pathData="M82,32 h4 v15 h-4 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M89,38 h4 v15 h-4 z" />
 </vector>
